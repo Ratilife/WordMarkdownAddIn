@@ -1,13 +1,13 @@
 ﻿namespace WordMarkdownAddIn
 {
-    partial class RibbonMarkdown : Microsoft.Office.Tools.Ribbon.RibbonBase
+    partial class MarkdownRibbon : Microsoft.Office.Tools.Ribbon.RibbonBase
     {
         /// <summary>
         /// Обязательная переменная конструктора.
         /// </summary>
         private System.ComponentModel.IContainer components = null;
 
-        public RibbonMarkdown()
+        public MarkdownRibbon()
             : base(Globals.Factory.GetRibbonFactory())
         {
             InitializeComponent();
@@ -34,19 +34,19 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.tab1 = this.Factory.CreateRibbonTab();
+            this.tabMarkdown = this.Factory.CreateRibbonTab();
             this.grMarkdown = this.Factory.CreateRibbonGroup();
             this.btnSave = this.Factory.CreateRibbonButton();
-            this.tab1.SuspendLayout();
+            this.tabMarkdown.SuspendLayout();
             this.grMarkdown.SuspendLayout();
             this.SuspendLayout();
             // 
-            // tab1
+            // tabMarkdown
             // 
-            this.tab1.ControlId.ControlIdType = Microsoft.Office.Tools.Ribbon.RibbonControlIdType.Office;
-            this.tab1.Groups.Add(this.grMarkdown);
-            this.tab1.Label = "TabAddIns";
-            this.tab1.Name = "tab1";
+            this.tabMarkdown.ControlId.ControlIdType = Microsoft.Office.Tools.Ribbon.RibbonControlIdType.Office;
+            this.tabMarkdown.Groups.Add(this.grMarkdown);
+            this.tabMarkdown.Label = "Markdown";
+            this.tabMarkdown.Name = "tabMarkdown";
             // 
             // grMarkdown
             // 
@@ -60,14 +60,14 @@
             this.btnSave.Name = "btnSave";
             this.btnSave.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnSave_Click);
             // 
-            // RibbonMarkdown
+            // MarkdownRibbon
             // 
-            this.Name = "RibbonMarkdown";
+            this.Name = "MarkdownRibbon";
             this.RibbonType = "Microsoft.Word.Document";
-            this.Tabs.Add(this.tab1);
-            this.Load += new Microsoft.Office.Tools.Ribbon.RibbonUIEventHandler(this.Ribbon1_Load);
-            this.tab1.ResumeLayout(false);
-            this.tab1.PerformLayout();
+            this.Tabs.Add(this.tabMarkdown);
+            this.Load += new Microsoft.Office.Tools.Ribbon.RibbonUIEventHandler(this.MarkdownRibbon_Load);
+            this.tabMarkdown.ResumeLayout(false);
+            this.tabMarkdown.PerformLayout();
             this.grMarkdown.ResumeLayout(false);
             this.grMarkdown.PerformLayout();
             this.ResumeLayout(false);
@@ -76,16 +76,16 @@
 
         #endregion
 
-        internal Microsoft.Office.Tools.Ribbon.RibbonTab tab1;
+        internal Microsoft.Office.Tools.Ribbon.RibbonTab tabMarkdown;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup grMarkdown;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnSave;
     }
 
     partial class ThisRibbonCollection
     {
-        internal RibbonMarkdown Ribbon1
+        internal MarkdownRibbon MarkdownRibbon
         {
-            get { return this.GetRibbon<RibbonMarkdown>(); }
+            get { return this.GetRibbon<MarkdownRibbon>(); }
         }
     }
 }

@@ -6,9 +6,9 @@ using System.Text;
 
 namespace WordMarkdownAddIn
 {
-    public partial class RibbonMarkdown
+    public partial class MarkdownRibbon
     {
-        private void Ribbon1_Load(object sender, RibbonUIEventArgs e)
+        private void MarkdownRibbon_Load(object sender, RibbonUIEventArgs e)
         {
 
         }
