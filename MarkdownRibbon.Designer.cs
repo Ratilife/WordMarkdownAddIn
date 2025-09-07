@@ -35,30 +35,62 @@
         private void InitializeComponent()
         {
             this.tabMarkdown = this.Factory.CreateRibbonTab();
-            this.grMarkdown = this.Factory.CreateRibbonGroup();
+            this.grpFile = this.Factory.CreateRibbonGroup();
             this.btnSave = this.Factory.CreateRibbonButton();
+            this.btnPanel = this.Factory.CreateRibbonButton();
+            this.btnOpen = this.Factory.CreateRibbonButton();
+            this.grpFormat = this.Factory.CreateRibbonGroup();
+            this.bBold = this.Factory.CreateRibbonButton();
             this.tabMarkdown.SuspendLayout();
-            this.grMarkdown.SuspendLayout();
+            this.grpFile.SuspendLayout();
+            this.grpFormat.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabMarkdown
             // 
             this.tabMarkdown.ControlId.ControlIdType = Microsoft.Office.Tools.Ribbon.RibbonControlIdType.Office;
-            this.tabMarkdown.Groups.Add(this.grMarkdown);
+            this.tabMarkdown.Groups.Add(this.grpFile);
+            this.tabMarkdown.Groups.Add(this.grpFormat);
             this.tabMarkdown.Label = "Markdown";
             this.tabMarkdown.Name = "tabMarkdown";
             // 
-            // grMarkdown
+            // grpFile
             // 
-            this.grMarkdown.Items.Add(this.btnSave);
-            this.grMarkdown.Label = "Markdown";
-            this.grMarkdown.Name = "grMarkdown";
+            this.grpFile.Items.Add(this.btnSave);
+            this.grpFile.Items.Add(this.btnPanel);
+            this.grpFile.Items.Add(this.btnOpen);
+            this.grpFile.Label = "Файл";
+            this.grpFile.Name = "grpFile";
             // 
             // btnSave
             // 
-            this.btnSave.Label = "Сохранить";
+            this.btnSave.Label = "Сохранить .md";
             this.btnSave.Name = "btnSave";
             this.btnSave.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnSave_Click);
+            // 
+            // btnPanel
+            // 
+            this.btnPanel.Label = "Панель";
+            this.btnPanel.Name = "btnPanel";
+            this.btnPanel.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnPanel_Click);
+            // 
+            // btnOpen
+            // 
+            this.btnOpen.Label = "Открыть .md";
+            this.btnOpen.Name = "btnOpen";
+            this.btnOpen.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnOpen_Click);
+            // 
+            // grpFormat
+            // 
+            this.grpFormat.Items.Add(this.bBold);
+            this.grpFormat.Label = "Форматирование";
+            this.grpFormat.Name = "grpFormat";
+            // 
+            // bBold
+            // 
+            this.bBold.Label = "Жирный";
+            this.bBold.Name = "bBold";
+            this.bBold.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bBold_Click);
             // 
             // MarkdownRibbon
             // 
@@ -68,8 +100,10 @@
             this.Load += new Microsoft.Office.Tools.Ribbon.RibbonUIEventHandler(this.MarkdownRibbon_Load);
             this.tabMarkdown.ResumeLayout(false);
             this.tabMarkdown.PerformLayout();
-            this.grMarkdown.ResumeLayout(false);
-            this.grMarkdown.PerformLayout();
+            this.grpFile.ResumeLayout(false);
+            this.grpFile.PerformLayout();
+            this.grpFormat.ResumeLayout(false);
+            this.grpFormat.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -77,8 +111,12 @@
         #endregion
 
         internal Microsoft.Office.Tools.Ribbon.RibbonTab tabMarkdown;
-        internal Microsoft.Office.Tools.Ribbon.RibbonGroup grMarkdown;
+        internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpFile;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnSave;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton btnPanel;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton btnOpen;
+        internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpFormat;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bBold;
     }
 
     partial class ThisRibbonCollection
