@@ -41,9 +41,27 @@
             this.btnOpen = this.Factory.CreateRibbonButton();
             this.grpFormat = this.Factory.CreateRibbonGroup();
             this.bBold = this.Factory.CreateRibbonButton();
+            this.bItalic = this.Factory.CreateRibbonButton();
+            this.bStrike = this.Factory.CreateRibbonButton();
+            this.bCode = this.Factory.CreateRibbonButton();
+            this.grpInsert = this.Factory.CreateRibbonGroup();
+            this.bH1 = this.Factory.CreateRibbonButton();
+            this.bH2 = this.Factory.CreateRibbonButton();
+            this.bH3 = this.Factory.CreateRibbonButton();
+            this.bList = this.Factory.CreateRibbonButton();
+            this.bNumList = this.Factory.CreateRibbonButton();
+            this.bCheckbox = this.Factory.CreateRibbonButton();
+            this.bTable = this.Factory.CreateRibbonButton();
+            this.bLink = this.Factory.CreateRibbonButton();
+            this.bImage = this.Factory.CreateRibbonButton();
+            this.bHR = this.Factory.CreateRibbonButton();
+            this.bCodeBlock = this.Factory.CreateRibbonButton();
+            this.bMermaid = this.Factory.CreateRibbonButton();
+            this.bMath = this.Factory.CreateRibbonButton();
             this.tabMarkdown.SuspendLayout();
             this.grpFile.SuspendLayout();
             this.grpFormat.SuspendLayout();
+            this.grpInsert.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabMarkdown
@@ -51,6 +69,7 @@
             this.tabMarkdown.ControlId.ControlIdType = Microsoft.Office.Tools.Ribbon.RibbonControlIdType.Office;
             this.tabMarkdown.Groups.Add(this.grpFile);
             this.tabMarkdown.Groups.Add(this.grpFormat);
+            this.tabMarkdown.Groups.Add(this.grpInsert);
             this.tabMarkdown.Label = "Markdown";
             this.tabMarkdown.Name = "tabMarkdown";
             // 
@@ -83,6 +102,9 @@
             // grpFormat
             // 
             this.grpFormat.Items.Add(this.bBold);
+            this.grpFormat.Items.Add(this.bItalic);
+            this.grpFormat.Items.Add(this.bStrike);
+            this.grpFormat.Items.Add(this.bCode);
             this.grpFormat.Label = "Форматирование";
             this.grpFormat.Name = "grpFormat";
             // 
@@ -91,6 +113,117 @@
             this.bBold.Label = "Жирный";
             this.bBold.Name = "bBold";
             this.bBold.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bBold_Click);
+            // 
+            // bItalic
+            // 
+            this.bItalic.Label = "Курсив";
+            this.bItalic.Name = "bItalic";
+            this.bItalic.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bItalic_Click);
+            // 
+            // bStrike
+            // 
+            this.bStrike.Label = "Зачеркнуть";
+            this.bStrike.Name = "bStrike";
+            this.bStrike.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bStrike_Click);
+            // 
+            // bCode
+            // 
+            this.bCode.Label = "Код";
+            this.bCode.Name = "bCode";
+            // 
+            // grpInsert
+            // 
+            this.grpInsert.Items.Add(this.bH1);
+            this.grpInsert.Items.Add(this.bH2);
+            this.grpInsert.Items.Add(this.bH3);
+            this.grpInsert.Items.Add(this.bList);
+            this.grpInsert.Items.Add(this.bNumList);
+            this.grpInsert.Items.Add(this.bCheckbox);
+            this.grpInsert.Items.Add(this.bTable);
+            this.grpInsert.Items.Add(this.bLink);
+            this.grpInsert.Items.Add(this.bImage);
+            this.grpInsert.Items.Add(this.bHR);
+            this.grpInsert.Items.Add(this.bCodeBlock);
+            this.grpInsert.Items.Add(this.bMermaid);
+            this.grpInsert.Items.Add(this.bMath);
+            this.grpInsert.Label = "Вставка";
+            this.grpInsert.Name = "grpInsert";
+            // 
+            // bH1
+            // 
+            this.bH1.Label = "H1";
+            this.bH1.Name = "bH1";
+            this.bH1.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bH1_Click);
+            // 
+            // bH2
+            // 
+            this.bH2.Label = "H2";
+            this.bH2.Name = "bH2";
+            this.bH2.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bH2_Click);
+            // 
+            // bH3
+            // 
+            this.bH3.Label = "H3";
+            this.bH3.Name = "bH3";
+            // 
+            // bList
+            // 
+            this.bList.Label = "Список -";
+            this.bList.Name = "bList";
+            this.bList.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bList_Click);
+            // 
+            // bNumList
+            // 
+            this.bNumList.Label = "Список 1.";
+            this.bNumList.Name = "bNumList";
+            this.bNumList.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bNumList_Click);
+            // 
+            // bCheckbox
+            // 
+            this.bCheckbox.Label = "Чекбокс";
+            this.bCheckbox.Name = "bCheckbox";
+            this.bCheckbox.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bCheckbox_Click);
+            // 
+            // bTable
+            // 
+            this.bTable.Label = "Таблица";
+            this.bTable.Name = "bTable";
+            this.bTable.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bTable_Click);
+            // 
+            // bLink
+            // 
+            this.bLink.Label = "Ссылка";
+            this.bLink.Name = "bLink";
+            this.bLink.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bLink_Click);
+            // 
+            // bImage
+            // 
+            this.bImage.Label = "Изображение";
+            this.bImage.Name = "bImage";
+            // 
+            // bHR
+            // 
+            this.bHR.Label = "Разделитель";
+            this.bHR.Name = "bHR";
+            this.bHR.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bHR_Click);
+            // 
+            // bCodeBlock
+            // 
+            this.bCodeBlock.Label = "Код-блок";
+            this.bCodeBlock.Name = "bCodeBlock";
+            this.bCodeBlock.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bCodeBlock_Click);
+            // 
+            // bMermaid
+            // 
+            this.bMermaid.Label = "Mermaid";
+            this.bMermaid.Name = "bMermaid";
+            this.bMermaid.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bMermaid_Click);
+            // 
+            // bMath
+            // 
+            this.bMath.Label = "Формула";
+            this.bMath.Name = "bMath";
+            this.bMath.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bMath_Click);
             // 
             // MarkdownRibbon
             // 
@@ -104,6 +237,8 @@
             this.grpFile.PerformLayout();
             this.grpFormat.ResumeLayout(false);
             this.grpFormat.PerformLayout();
+            this.grpInsert.ResumeLayout(false);
+            this.grpInsert.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -117,6 +252,23 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnOpen;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpFormat;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bBold;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bItalic;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bStrike;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bCode;
+        internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpInsert;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bH1;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bH2;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bH3;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bList;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bNumList;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bCheckbox;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bTable;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bLink;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bImage;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bHR;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bCodeBlock;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bMermaid;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bMath;
     }
 
     partial class ThisRibbonCollection

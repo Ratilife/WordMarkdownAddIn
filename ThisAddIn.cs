@@ -99,7 +99,7 @@ namespace WordMarkdownAddIn
         {
             try
             {
-                var md = PaneControl?.GetCachedMarkdown() ?? string.Empty;
+                var md = PaneControl.GetCachedMarkdown() ?? string.Empty;
                 Services.DocumentSyncService.SaveMarkdownToActiveDocument(Application, md);
             }
             catch { }

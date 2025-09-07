@@ -39,6 +39,7 @@ namespace WordMarkdownAddIn.Controls
             _coreReady = true;                                                                          //Разрешает выполнение методов, которые работают с WebView2
             _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;                //Подписывается на событие получения сообщений из JavaScript    
 
+            _webView.CoreWebView2.NavigateToString(BuildHtmlShell());
         }
 
 
@@ -124,6 +125,7 @@ namespace WordMarkdownAddIn.Controls
                                                                                                                         // markdown ?? string.Empty - если null, использует пустую строку            
                                                                                                                         // _latestMarkdown - локальная переменная для хранения текущего текста
                                                                                                                         // Цель: Быстрый доступ к тексту без запроса к JavaScript
+            if (!_coreReady || _webView?.CoreWebView2 == null) return;
             if (!_coreReady) return;                                                                                    // Проверка готовности WebView2
             var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_latestMarkdown));                                  // Кодирование в Base64
                                                                                                                         // Encoding.UTF8.GetBytes() - преобразует строку в байты UTF-8
