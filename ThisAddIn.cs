@@ -36,7 +36,7 @@ namespace WordMarkdownAddIn
             MarkdownPane = this.CustomTaskPanes.Add(PaneControl, "Markdown");
             MarkdownPane.Visible = true;
             MarkdownPane.DockPosition = Office.MsoCTPDockPosition.msoCTPDockPositionRight;
-            MarkdownPane.Width = 400;
+            MarkdownPane.Width = 600;
             // 4. Загружаем сохраненный Markdown из текущего документа
             try
             {

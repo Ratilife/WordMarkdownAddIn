@@ -35,10 +35,14 @@ namespace WordMarkdownAddIn.Controls
                                                                                                         //Загружает WebView2 Runtime (если не установлен)
                                                                                                         //Создает браузерный процесс и окружение
                                                                                                         //await означает "ждать завершения без блокировки UI"
-                                                                                                        //Без этой строки _webView.CoreWebView2 будет null
+                                                                                                        //Без этой строки _webView.CoreWebView2 будет null          
+            
             _coreReady = true;                                                                          //Разрешает выполнение методов, которые работают с WebView2
             _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;                //Подписывается на событие получения сообщений из JavaScript    
-
+            _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
+            _webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
+            _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             _webView.CoreWebView2.NavigateToString(BuildHtmlShell());
         }
 
@@ -71,7 +75,7 @@ namespace WordMarkdownAddIn.Controls
                 if (string.IsNullOrEmpty(json)) return;                                                 // Если сообщение пустое или null - выходим из метода
                 var parts = json.Split(new[] { '|' }, 2);                                               // Split - разделяет строку по символу | на 2 части
                                                                                                         // Пример: "mdChanged|SGVsbG8=" → ["mdChanged", "SGVsbG8="]
-                if (parts.Length == 2) return;                                                          // Если сообщение не соответствует формату - игнорируем
+                if (parts.Length != 2) return;                                                          // Если сообщение не соответствует формату - игнорируем
                 var type = parts[0];                                                                    // тип сообщения (например: "mdChanged")
                 var payload = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1]));              // декодированные данные из Base64
                                                                                                         // Convert.FromBase64String() - преобразует Base64 в байты
@@ -376,7 +380,191 @@ namespace WordMarkdownAddIn.Controls
             }
         }
 
-        private string BuildHtmlShell() 
+        private string BuildHtmlShell()
+        {
+            return @"<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset=""utf-8""/>
+            <meta http-equiv=""X-UA-Compatible"" content=""IE=edge"" />
+            <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
+            <title>Markdown Editor</title>
+            <style>
+                html, body { 
+                    height: 100%; 
+                    margin: 0; 
+                    font-family: Segoe UI, Arial, sans-serif; 
+                }   
+                .container { 
+                    display: flex; 
+                    height: 100%; 
+                }
+                #editor { 
+                    width: 50%; 
+                    height: 100%; 
+                    border: none; 
+                    padding: 12px; 
+                    font-family: Consolas, monospace; 
+                    font-size: 13px; 
+                    box-sizing: border-box; 
+                    outline: none; 
+                    resize: none; 
+                    border-right: 1px solid #ddd; 
+                }
+                #preview { 
+                    width: 50%; 
+                    height: 100%; 
+                    overflow: auto; 
+                    padding: 16px; 
+                    box-sizing: border-box; 
+                }
+                pre { 
+                    background: #f6f8fa; 
+                    padding: 10px; 
+                    overflow: auto; 
+                }
+                code { 
+                    font-family: Consolas, monospace; 
+                }
+            </style>
+        </head>
+        <body>
+            <div class=""container"">
+                <textarea id=""editor"" placeholder=""Введите Markdown...""></textarea>
+                <div id=""preview""></div>
+            </div>
+
+            <!-- Скрипты -->
+            <script src=""https://cdn.jsdelivr.net/npm/dompurify@3.1.0/dist/purify.min.js""></script>
+            <script src=""https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js""></script>
+            <script src=""https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js""></script>
+            <script>Prism.plugins.autoloader.languages_path = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/';</script>
+            <script src=""https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js""></script>
+            <script>mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });</script>
+            <script>window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\\(', '\\\)']] }, svg: { fontCache: 'global' } };</script>
+            <script src=""https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js""></script>
+            
+            <script>
+                // Базовые переменные
+                const editor = document.getElementById('editor');
+                const preview = document.getElementById('preview');
+
+                // Функция для отправки сообщений в C#
+                function postToHost(type, text) {
+                    try {
+                        // Правильное кодирование base64
+                        const b64 = btoa(encodeURIComponent(text || ''));
+                        if (window.chrome && window.chrome.webview) {
+                            window.chrome.webview.postMessage(type + '|' + b64);
+                        }
+                        else if (window.external && typeof window.external.notify === 'function') {
+                            window.external.notify(type + '|' + b64);
+                        }
+                    } catch(e) { 
+                        console.error('Ошибка отправки:', e); 
+                    }
+                }
+
+                // Уведомление об изменениях с задержкой
+                function debounce(fn, ms) { 
+                    let t; 
+                    return function() { 
+                        clearTimeout(t); 
+                        t = setTimeout(() => fn.apply(this, arguments), ms); 
+                    } 
+                }
+
+                function notifyChange() { 
+                    postToHost('mdChanged', editor.value); 
+                }
+
+                // Слушаем изменения в редакторе
+                editor.addEventListener('input', debounce(notifyChange, 120));
+
+                // Методы для вызова из C#
+                window.editorSetValue = function(text) { 
+                    editor.value = text || ''; 
+                    notifyChange(); 
+                }
+                
+                window.editorGetValue = function() { 
+                    return editor.value || ''; 
+                }
+
+                window.insertAroundSelection = function(prefix, suffix) {
+                    prefix = prefix || ''; 
+                    suffix = suffix || '';
+                    const start = editor.selectionStart || 0;
+                    const end = editor.selectionEnd || 0;
+                    const val = editor.value;
+    
+                    editor.value = val.substring(0, start) + 
+                        prefix + 
+                        val.substring(start, end) + 
+                        suffix + 
+                        val.substring(end);
+    
+                    const newPos = start + prefix.length + (end - start);
+                    editor.setSelectionRange(newPos, newPos);
+                    editor.focus();
+                    notifyChange();
+                }
+                
+                window.insertSnippet = function(snippet) {
+                    const pos = editor.selectionStart || 0;
+                    const val = editor.value;
+                    editor.value = val.substring(0, pos) + snippet + val.substring(pos);
+                    const newPos = pos + snippet.length;
+                    editor.setSelectionRange(newPos, newPos);
+                    editor.focus();
+                    notifyChange();
+                }
+
+                window.renderHtml = function(html) {
+                    try {
+                        // Базовая очистка и отображение
+                        const clean = DOMPurify.sanitize(html || '', { 
+                            ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] 
+                        });
+                        preview.innerHTML = clean;
+                        
+                        // Преобразовать блоки кода mermaid в divs
+                        const mermaidBlocks = preview.querySelectorAll('pre code.language-mermaid');
+                        mermaidBlocks.forEach(code => {
+                            const pre = code.parentElement;
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'mermaid';
+                            wrapper.textContent = code.textContent;
+                            pre.replaceWith(wrapper);
+                        });
+                        
+                        Prism.highlightAllUnder(preview);
+                        
+                        if (window.mermaid) {
+                            mermaid.init(undefined, preview.querySelectorAll('.mermaid'));
+                        }
+                        
+                        if (window.MathJax && MathJax.typesetPromise) {
+                            MathJax.typesetPromise([preview]).catch(err => console.error(err));
+                        }
+                    } catch(e) { 
+                        console.error('Ошибка рендеринга:', e); 
+                    }
+                }
+
+                // Инициализация после загрузки
+                setTimeout(() => {
+                    editor.focus();
+                    notifyChange();
+                }, 100);
+
+            </script>
+        </body>
+        </html>
+    ";
+        }
+
+        private string BuildHtmlShell_Old() 
         {
             return @"<!DOCTYPE html>
                 <html>
@@ -458,6 +646,12 @@ namespace WordMarkdownAddIn.Controls
                                 const b64 = btoa(unescape(encodeURIComponent(text || '')));
                                 if (window.chrome && window.chrome.webview) {
                                     window.chrome.webview.postMessage(type + '|' + b64);
+                                }
+                                 else if (window.chrome && window.chrome.webview) {
+                                    window.chrome.webview.postMessage(type + '|' + b64);
+                                }
+                                else if (window.external && typeof window.external.notify === 'function') {
+                                    window.external.notify(type + '|' + b64);
                                 }
                                 } catch(e) { 
                                     console.error('Ошибка отправки:', e); 
@@ -542,6 +736,12 @@ namespace WordMarkdownAddIn.Controls
                                 if (window.MathJax && MathJax.typesetPromise) {
                                     MathJax.typesetPromise([preview]).catch(err => console.error(err));
                                 }
+                                window.addEventListener('load', function() {
+                                    editor.focus();
+                                    //notifyChange(); // Отправить начальное состояние
+                                    setTimeout(() => notifyChange(), 100);
+                                });
+
                             } catch(e) { 
                                 console.error('Ошибка рендеринга:', e); 
                             }
