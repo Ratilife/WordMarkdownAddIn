@@ -1,0 +1,207 @@
+@startuml WordMarkdownAddIn-ClassDiagram
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+package "WordMarkdownAddIn" {
+    
+    class ThisAddIn {
+        - {static} CustomTaskPane MarkdownPane
+        - {static} TaskPaneControl PaneControl
+        - {static} MarkdownRibbon Ribbon
+        - Dictionary<string,object> Properties
+        - {static} ThisAddIn Instance
+        - Word.Application Application
+        - CustomTaskPaneCollection CustomTaskPanes
+        --
+        + TogglePane() : void
+        - ThisAddIn_Startup(sender, e) : void
+        - ThisAddIn_Shutdown(sender, e) : void
+        - Application_DocumentBeforeSave(Doc, SaveAsUI, Cancel) : void
+    }
+    
+    class MarkdownRibbon {
+        + RibbonTab tabMarkdown
+        + RibbonGroup grpFile
+        + RibbonButton btnSave
+        + RibbonButton btnPanel
+        + RibbonButton btnOpen
+        + RibbonGroup grpFormat
+        + RibbonButton bBold
+        + RibbonButton bItalic
+        + RibbonButton bStrike
+        + RibbonGroup grpInsert
+        + RibbonButton bH1
+        + RibbonButton bH2
+        + RibbonButton bList
+        + RibbonButton bNumList
+        + RibbonButton bCheckbox
+        + RibbonButton bTable
+        + RibbonButton bLink
+        + RibbonButton bHR
+        + RibbonButton bCodeBlock
+        + RibbonButton bMermaid
+        + RibbonButton bMath
+        --
+        - MarkdownRibbon_Load(sender, e) : void
+        + btnSave_Click(sender, e) : void
+        + btnPanel_Click(sender, e) : void
+        + btnOpen_Click(sender, e) : void
+        + bBold_Click(sender, e) : void
+        + bItalic_Click(sender, e) : void
+        + bStrike_Click(sender, e) : void
+        + bH1_Click(sender, e) : void
+        + bH2_Click(sender, e) : void
+        + bList_Click(sender, e) : void
+        + bNumList_Click(sender, e) : void
+        + bCheckbox_Click(sender, e) : void
+        + bTable_Click(sender, e) : void
+        + bLink_Click(sender, e) : void
+        + bHR_Click(sender, e) : void
+        + bMermaid_Click(sender, e) : void
+        + bCodeBlock_Click(sender, e) : void
+        + bMath_Click(sender, e) : void
+    }
+    
+    package "Controls" {
+        class TaskPaneControl {
+            - WebView2 _webView
+            - MarkdownRenderService _renderer
+            - string _latestMarkdown
+            - bool _coreReady
+            --
+            + TaskPaneControl()
+            - OnLoadAsync(sender, e) : void
+            - CoreWebView2_WebMessageReceived(sender, e) : void
+            - PostRenderHtml(html) : void
+            + SetMarkdown(markdown) : void
+            + GetCachedMarkdown() : string
+            + GetMarkdownAsync() : Task<string>
+            + InsertInline(prefix, suffix) : void
+            + InsertSnippet(snippet) : void
+            + InsertHeading(level) : void
+            + InsertBulletList() : void
+            + InsertNumberedList() : void
+            + InsertCheckbox(isChecked) : void
+            + InsertTable(rows, cols) : void
+            + InsertLink(text, url) : void
+            + InsertImage(alt, path) : void
+            + InsertCodeBlock(language) : void
+            + InsertMermaidSample() : void
+            + InsertMermaid(mermaid_text) : void
+            + InsertMathSample() : void
+            + InsertMath(math_text) : void
+            + SaveMarkdownFile() : void
+            + OpenMarkdownFile() : void
+            - BuildHtmlShell() : string
+        }
+    }
+    
+    package "Services" {
+        class MarkdownRenderService {
+            - MarkdownPipeline _pipeline
+            - {static} Regex MermaidPreCodeRegex
+            --
+            + MarkdownRenderService()
+            + RenderoHtml(markdown) : string
+            - TransformMermaidBlocks(html) : string
+        }
+        
+        class DocumentSyncService {
+            + {static} const string NamespaceUri
+            --
+            + {static} LoadMarkdownFromActiveDocument(app) : string
+            + {static} SaveMarkdownToActiveDocument(app, markdown) : void
+            - {static} BuildXml(content) : string
+            - {static} FindExistingPart(doc) : CustomXMLPart
+        }
+    }
+    
+    class Globals {
+        + {static} ThisAddIn ThisAddIn
+        + {static} ApplicationFactory Factory
+        + {static} ThisRibbonCollection Ribbons
+    }
+}
+
+package "Microsoft.Office.Tools" {
+    abstract class AddInBase
+    abstract class RibbonBase
+    class CustomTaskPane {
+        + bool Visible
+        + int Width
+        + MsoCTPDockPosition DockPosition
+    }
+}
+
+package "System.Windows.Forms" {
+    class UserControl
+}
+
+package "Microsoft.Web.WebView2" {
+    class WebView2 {
+        + CoreWebView2 CoreWebView2
+        + EnsureCoreWebView2Async() : Task
+        + ExecuteScriptAsync(script) : Task
+    }
+}
+
+package "Markdig" {
+    class MarkdownPipeline
+}
+
+package "Microsoft.Office.Interop.Word" {
+    class WordApplication {
+        + Document ActiveDocument
+        + event DocumentBeforeSave
+    }
+}
+
+' Наследование
+ThisAddIn --|> AddInBase
+MarkdownRibbon --|> RibbonBase
+TaskPaneControl --|> UserControl
+
+' Композиция (полное владение)
+ThisAddIn *-- CustomTaskPane : создает
+ThisAddIn *-- TaskPaneControl : создает
+ThisAddIn *-- MarkdownRibbon : создает
+TaskPaneControl *-- WebView2 : содержит
+TaskPaneControl *-- MarkdownRenderService : содержит
+
+' Ассоциация (использование)
+ThisAddIn --> WordApplication : использует
+ThisAddIn --> DocumentSyncService : использует
+MarkdownRibbon ..> ThisAddIn : вызывает статические методы
+MarkdownRibbon ..> TaskPaneControl : через ThisAddIn
+TaskPaneControl --> DocumentSyncService : использует
+TaskPaneControl --> MarkdownRenderService : использует
+MarkdownRenderService --> MarkdownPipeline : использует
+DocumentSyncService --> WordApplication : использует
+Globals ..> ThisAddIn : ссылается
+
+note right of ThisAddIn
+    Главный класс надстройки.
+    Управляет жизненным циклом приложения
+    и координирует работу всех компонентов.
+end note
+
+note right of TaskPaneControl
+    Контрол редактора Markdown.
+    Использует WebView2 для отображения
+    HTML редактора с предпросмотром.
+end note
+
+note right of MarkdownRenderService
+    Преобразует Markdown в HTML
+    с использованием библиотеки Markdig.
+end note
+
+note right of DocumentSyncService
+    Статический сервис для синхронизации
+    Markdown с Word документами через
+    CustomXMLPart.
+end note
+
+@enduml
+
