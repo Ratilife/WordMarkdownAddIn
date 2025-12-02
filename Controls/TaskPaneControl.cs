@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using WordMarkdownAddIn.Properties;
 
 namespace WordMarkdownAddIn.Controls
 {
@@ -86,6 +87,18 @@ namespace WordMarkdownAddIn.Controls
                     _latestMarkdown = payload;                                                          // Сохранение - обновление кэша
                     var html = _renderer.RenderoHtml(payload);                                          // Конвертация - Markdown → HTML
                     PostRenderHtml(html);                                                               // Отправка - показ HTML в preview
+                }
+                
+                // Обработка изменения режима отображения
+                if (type == "viewModeChanged")
+                {
+                    // Сохраняем режим в настройках приложения
+                    try
+                    {
+                        Settings.Default.ViewMode = payload;
+                        Settings.Default.Save();
+                    }
+                    catch { /* Игнорируем ошибки сохранения настроек */ }
                 }
 
             }
@@ -380,6 +393,47 @@ namespace WordMarkdownAddIn.Controls
             }
         }
 
+        /// <summary>
+        /// Устанавливает режим отображения панели (Split, Markdown-only, HTML-only)
+        /// </summary>
+        /// <param name="mode">Режим отображения: "split", "markdown" или "html"</param>
+        public void SetViewMode(string mode)
+        {
+            if (!_coreReady || _webView?.CoreWebView2 == null) return;
+            
+            // Валидация режима
+            if (mode != "split" && mode != "markdown" && mode != "html")
+                mode = "split";
+            
+            // Вызов JavaScript функции для переключения режима
+            _webView.CoreWebView2.ExecuteScriptAsync($"window.setViewMode('{mode}');void(0);");
+        }
+
+        /// <summary>
+        /// Получает текущий режим отображения панели
+        /// </summary>
+        /// <returns>Текущий режим: "split", "markdown" или "html"</returns>
+        public async Task<string> GetCurrentViewModeAsync()
+        {
+            if (!_coreReady || _webView?.CoreWebView2 == null) return "split";
+            
+            try
+            {
+                var result = await _webView.CoreWebView2.ExecuteScriptAsync("window.getViewMode()");
+                var mode = UnquoteJsonString(result);
+                
+                // Валидация результата
+                if (mode == "split" || mode == "markdown" || mode == "html")
+                    return mode;
+                
+                return "split";
+            }
+            catch
+            {
+                return "split";
+            }
+        }
+
         private string BuildHtmlShell()
         {
             return @"<!DOCTYPE html>
@@ -395,10 +449,41 @@ namespace WordMarkdownAddIn.Controls
                     margin: 0; 
                     font-family: Segoe UI, Arial, sans-serif; 
                 }   
+                
+                /* Панель управления режимами */
+                .view-controls {
+                    display: flex;
+                    gap: 4px;
+                    padding: 8px;
+                    background: #f5f5f5;
+                    border-bottom: 1px solid #ddd;
+                }
+                
+                .view-btn {
+                    padding: 6px 12px;
+                    border: 1px solid #ccc;
+                    background: white;
+                    cursor: pointer;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    transition: all 0.2s ease;
+                }
+                
+                .view-btn:hover {
+                    background: #e0e0e0;
+                }
+                
+                .view-btn.active {
+                    background: #0078d4;
+                    color: white;
+                    border-color: #0078d4;
+                }
+                
                 .container { 
                     display: flex; 
-                    height: 100%; 
+                    height: calc(100% - 45px); 
                 }
+                
                 #editor { 
                     width: 50%; 
                     height: 100%; 
@@ -410,14 +495,61 @@ namespace WordMarkdownAddIn.Controls
                     outline: none; 
                     resize: none; 
                     border-right: 1px solid #ddd; 
+                    transition: width 0.3s ease, opacity 0.2s ease;
                 }
+                
                 #preview { 
                     width: 50%; 
                     height: 100%; 
                     overflow: auto; 
                     padding: 16px; 
                     box-sizing: border-box; 
+                    transition: width 0.3s ease, opacity 0.2s ease;
                 }
+                
+                /* Режим Split (по умолчанию) */
+                .view-mode-split .container {
+                    display: flex;
+                }
+                
+                .view-mode-split #editor {
+                    width: 50%;
+                    display: block;
+                }
+                
+                .view-mode-split #preview {
+                    width: 50%;
+                    display: block;
+                }
+                
+                /* Режим только Markdown */
+                .view-mode-markdown .container {
+                    display: flex;
+                }
+                
+                .view-mode-markdown #editor {
+                    width: 100%;
+                    display: block;
+                }
+                
+                .view-mode-markdown #preview {
+                    display: none;
+                }
+                
+                /* Режим только HTML */
+                .view-mode-html .container {
+                    display: flex;
+                }
+                
+                .view-mode-html #editor {
+                    display: none;
+                }
+                
+                .view-mode-html #preview {
+                    width: 100%;
+                    display: block;
+                }
+                
                 pre { 
                     background: #f6f8fa; 
                     padding: 10px; 
@@ -429,6 +561,11 @@ namespace WordMarkdownAddIn.Controls
             </style>
         </head>
         <body>
+            <div class=""view-controls"">
+                <button id=""btn-split"" class=""view-btn active"">Split</button>
+                <button id=""btn-markdown"" class=""view-btn"">Markdown</button>
+                <button id=""btn-html"" class=""view-btn"">HTML</button>
+            </div>
             <div class=""container"">
                 <textarea id=""editor"" placeholder=""Введите Markdown...""></textarea>
                 <div id=""preview""></div>
@@ -448,6 +585,64 @@ namespace WordMarkdownAddIn.Controls
                 // Базовые переменные
                 const editor = document.getElementById('editor');
                 const preview = document.getElementById('preview');
+                
+                // Переменная для текущего режима отображения
+                let currentViewMode = 'split'; // по умолчанию
+                
+                // Функция переключения режима отображения
+                function setViewMode(mode) {
+                    currentViewMode = mode;
+                    
+                    // Удаляем все классы режимов с body
+                    document.body.classList.remove('view-mode-split', 'view-mode-markdown', 'view-mode-html');
+                    
+                    // Добавляем нужный класс
+                    document.body.classList.add('view-mode-' + mode);
+                    
+                    // Обновляем активную кнопку
+                    document.querySelectorAll('.view-btn').forEach(function(btn) {
+                        btn.classList.remove('active');
+                    });
+                    
+                    const activeBtn = document.getElementById('btn-' + mode);
+                    if (activeBtn) {
+                        activeBtn.classList.add('active');
+                    }
+                    
+                    // Сохраняем в localStorage
+                    try {
+                        localStorage.setItem('viewMode', mode);
+                    } catch(e) {
+                        console.error('Ошибка сохранения в localStorage:', e);
+                    }
+                    
+                    // Уведомляем C# о изменении режима
+                    postToHost('viewModeChanged', mode);
+                }
+                
+                // Обработчики кнопок переключения режимов
+                document.getElementById('btn-split').addEventListener('click', function() {
+                    setViewMode('split');
+                });
+                
+                document.getElementById('btn-markdown').addEventListener('click', function() {
+                    setViewMode('markdown');
+                });
+                
+                document.getElementById('btn-html').addEventListener('click', function() {
+                    setViewMode('html');
+                });
+                
+                // Функции для вызова из C#
+                window.setViewMode = function(mode) {
+                    if (mode === 'split' || mode === 'markdown' || mode === 'html') {
+                        setViewMode(mode);
+                    }
+                };
+                
+                window.getViewMode = function() {
+                    return currentViewMode;
+                };
 
                 // Функция для отправки сообщений в C#
                 function postToHost(type, text) {
@@ -553,7 +748,15 @@ namespace WordMarkdownAddIn.Controls
                 }
 
                 // Инициализация после загрузки
-                setTimeout(() => {
+                setTimeout(function() {
+                    // Загрузка сохраненного режима из localStorage
+                    try {
+                        const saved = localStorage.getItem('viewMode') || 'split';
+                        setViewMode(saved);
+                    } catch(e) {
+                        setViewMode('split');
+                    }
+                    
                     editor.focus();
                     notifyChange();
                 }, 100);

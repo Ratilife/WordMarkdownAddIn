@@ -7,6 +7,7 @@ using Word = Microsoft.Office.Interop.Word;
 using Office = Microsoft.Office.Core;
 using Microsoft.Office.Tools.Word;
 using Microsoft.Office.Tools;
+using WordMarkdownAddIn.Properties;
 
 
 
@@ -47,6 +48,22 @@ namespace WordMarkdownAddIn
                 }
             }
             catch { /* Игнорируем ошибки при старте */ }
+
+            // 4.1. Восстанавливаем сохраненный режим отображения
+            try
+            {
+                var savedMode = Settings.Default.ViewMode;
+                if (!string.IsNullOrEmpty(savedMode) && (savedMode == "split" || savedMode == "markdown" || savedMode == "html"))
+                {
+                    // Небольшая задержка для инициализации WebView2
+                    System.Threading.Tasks.Task.Delay(500).ContinueWith(t =>
+                    {
+                        System.Windows.Forms.Application.DoEvents();
+                        PaneControl.SetViewMode(savedMode);
+                    });
+                }
+            }
+            catch { /* Игнорируем ошибки при загрузке режима */ }
 
 
             // 5. Подписываемся на события Word для автоматического сохранения
