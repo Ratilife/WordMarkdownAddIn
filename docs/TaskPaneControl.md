@@ -163,3 +163,8 @@ _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;  //
    - Добавить индикаторы загрузки
    - Показывать прогресс при работе с большими файлами
 
+
+
+
+
+
