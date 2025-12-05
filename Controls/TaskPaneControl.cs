@@ -20,7 +20,7 @@ namespace WordMarkdownAddIn.Controls
 
         public TaskPaneControl() 
         {
-            _renderer = new Services.MarkdownRenderService();
+            _renderer = new Services.MarkdownRenderService();   // Средство визуализации 
             _webView = new WebView2
             {
                 Dock = DockStyle.Fill
