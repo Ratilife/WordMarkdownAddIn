@@ -107,18 +107,33 @@ namespace WordMarkdownAddIn.Controls
 
         private void PostRenderHtml(string html) 
         {
-            if (!_coreReady) return;                                                                    // Проверка готовности WebView2
-            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(html));                             // Кодирование HTML в Base64
+            if (!_coreReady || _webView == null) return;                                                // Проверка готовности WebView2
+            try
+            {
+                var coreWebView2 = _webView.CoreWebView2;
+                if (coreWebView2 == null) return;
+                
+                var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(html));                         // Кодирование HTML в Base64
                                                                                                         // Encoding.UTF8.GetBytes(html) - преобразует строку HTML в байты UTF-8
                                                                                                         // Convert.ToBase64String() - кодирует байты в строку Base64
                                                                                                         // Пример: <p>Hello</p> → "PHA+SGVsbG88L3A+"
-            _webView.CoreWebView2.ExecuteScriptAsync($"window.renderHtml(atob('{b64}'));void(0);");     // Выполнение JavaScript кода
+                coreWebView2.ExecuteScriptAsync($"window.renderHtml(atob('{b64}'));void(0);");          // Выполнение JavaScript кода
                                                                                                         // ExecuteScriptAsync() - асинхронно выполняет JavaScript код в WebView2
                                                                                                         // $"..." - строковая интерполяция C# для подстановки переменных
                                                                                                         // window.renderHtml() - вызов JavaScript функции из C#
                                                                                                         // atob('{b64}') - JavaScript функция декодирования Base64
                                                                                                         // void(0); - предотвращает возврат значения (оптимизация)
-
+            }
+            catch (InvalidCastException)
+            {
+                // WebView2 еще не готов, игнорируем
+                return;
+            }
+            catch (Exception)
+            {
+                // Другие ошибки тоже игнорируем
+                return;
+            }
         }
 
         /// <summary>
@@ -142,17 +157,32 @@ namespace WordMarkdownAddIn.Controls
                                                                                                                         // markdown ?? string.Empty - если null, использует пустую строку            
                                                                                                                         // _latestMarkdown - локальная переменная для хранения текущего текста
                                                                                                                         // Цель: Быстрый доступ к тексту без запроса к JavaScript
-            if (!_coreReady || _webView?.CoreWebView2 == null) return;
-            if (!_coreReady) return;                                                                                    // Проверка готовности WebView2
-            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_latestMarkdown));                                  // Кодирование в Base64
+            if (!_coreReady || _webView == null) return;                                                               // Проверка готовности WebView2
+            try
+            {
+                var coreWebView2 = _webView.CoreWebView2;
+                if (coreWebView2 == null) return;
+                
+                var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_latestMarkdown));                              // Кодирование в Base64
                                                                                                                         // Encoding.UTF8.GetBytes() - преобразует строку в байты UTF-8
                                                                                                                         // Convert.ToBase64String() - кодирует байты в Base64 строку
                                                                                                                         // Пример: "Hello" → "SGVsbG8="    
-            _webView.CoreWebView2.ExecuteScriptAsync($"window.editorSetValue(atob('{b64}'));void(0);");                 // Отправка в JavaScript
+                coreWebView2.ExecuteScriptAsync($"window.editorSetValue(atob('{b64}'));void(0);");                      // Отправка в JavaScript
                                                                                                                         // ExecuteScriptAsync() - выполняет JavaScript код асинхронно
                                                                                                                         // window.editorSetValue() - JS функция для установки значения редактора
                                                                                                                         // atob('{b64}') - JS функция декодирования Base64
                                                                                                                         // void(0); - предотвращает возврат значения (оптимизация)
+            }
+            catch (InvalidCastException)
+            {
+                // WebView2 еще не готов, игнорируем
+                return;
+            }
+            catch (Exception)
+            {
+                // Другие ошибки тоже игнорируем
+                return;
+            }
         }
 
         public string GetCachedMarkdown() => _latestMarkdown;          //предоставляет мгновенный доступ к последнему известному состоянию Markdown-текста без обращения к JavaScript.
@@ -163,10 +193,27 @@ namespace WordMarkdownAddIn.Controls
             //  Возвращает кэшированное значение (синхронизируется с помощью mdChanged). При необходимости можно вернуться к JS-запросу.
             if (!string.IsNullOrEmpty(_latestMarkdown)) return _latestMarkdown;                         //!string.IsNullOrEmpty() - проверяет что кэш не пустой
                                                                                                         // return _latestMarkdown - мгновенный возврат из кэша
-            if (_coreReady)                                                                             //_coreReady - флаг инициализации WebView2
+            if (_coreReady && _webView != null)                                                         //_coreReady - флаг инициализации WebView2
             {
-                var js = await _webView.CoreWebView2.ExecuteScriptAsync("window.editorGetValue()");
-                return UnquoteJsonString(js);                                                           // Обработка результата JavaScript
+                try
+                {
+                    var coreWebView2 = _webView.CoreWebView2;
+                    if (coreWebView2 != null)
+                    {
+                        var js = await coreWebView2.ExecuteScriptAsync("window.editorGetValue()");
+                        return UnquoteJsonString(js);                                                   // Обработка результата JavaScript
+                    }
+                }
+                catch (InvalidCastException)
+                {
+                    // WebView2 еще не готов
+                    return string.Empty;
+                }
+                catch (Exception)
+                {
+                    // Другие ошибки
+                    return string.Empty;
+                }
             }
             return string.Empty;                                                                        // Если WebView2 не готов и кэш пустой
         }
@@ -191,34 +238,66 @@ namespace WordMarkdownAddIn.Controls
         //Метод добавляет префикс и суффикс вокруг выделенного текста в редакторе (например, для жирного текста или кода)
         public void InsertInline(string prefix, string suffix)
         {
-            if (!_coreReady) return;                                                                                            //_coreReady - флаг инициализации WebView2
-            var p = Convert.ToBase64String(Encoding.UTF8.GetBytes(prefix ?? string.Empty));                                     //prefix ?? string.Empty - если null, использует пустую строку
+            if (!_coreReady || _webView == null) return;                                                                        //_coreReady - флаг инициализации WebView2
+            try
+            {
+                var coreWebView2 = _webView.CoreWebView2;
+                if (coreWebView2 == null) return;
+                
+                var p = Convert.ToBase64String(Encoding.UTF8.GetBytes(prefix ?? string.Empty));                                 //prefix ?? string.Empty - если null, использует пустую строку
                                                                                                                                 //Encoding.UTF8.GetBytes() - преобразует строку в байты UTF-8
                                                                                                                                 //Convert.ToBase64String() - кодирует байты в Base64
                                                                                                                                 // Пример: "**" → "Kg=="
-            var s = Convert.ToBase64String(Encoding.UTF8.GetBytes(suffix ?? string.Empty));                                     // Аналогично префиксу, но для суффикса
+                var s = Convert.ToBase64String(Encoding.UTF8.GetBytes(suffix ?? string.Empty));                                 // Аналогично префиксу, но для суффикса
                                                                                                                                 // Пример: "**" → "Kg=="
-            _webView.CoreWebView2.ExecuteScriptAsync($"window.insertAroundSelection(atob('{p}'), atob('{s}'));void(0);");       // Отправка в JavaScript
+                coreWebView2.ExecuteScriptAsync($"window.insertAroundSelection(atob('{p}'), atob('{s}'));void(0);");             // Отправка в JavaScript
                                                                                                                                 // ExecuteScriptAsync() - выполняет JS код асинхронно
                                                                                                                                 // window.insertAroundSelection() - JS функция для вставки вокруг выделения
                                                                                                                                 // atob('{p}') - JS декодирование Base64 префикса
                                                                                                                                 // atob('{s}') - JS декодирование Base64 суффикса
                                                                                                                                 // void(0); - предотвращает возврат значения
+            }
+            catch (InvalidCastException)
+            {
+                // WebView2 еще не готов, игнорируем
+                return;
+            }
+            catch (Exception)
+            {
+                // Другие ошибки тоже игнорируем
+                return;
+            }
         }
         //Метод вставляет предопределенные блоки Markdown(заголовки, списки, таблицы) в текущую позицию курсора.
         public void InsertSnippet(string snippet)
         {
-            if (!_coreReady) return;                                                                                            // _coreReady - флаг инициализации WebView2    
-            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(snippet ?? string.Empty));                                  // Кодирование сниппета в Base64
+            if (!_coreReady || _webView == null) return;                                                                         // _coreReady - флаг инициализации WebView2    
+            try
+            {
+                var coreWebView2 = _webView.CoreWebView2;
+                if (coreWebView2 == null) return;
+                
+                var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(snippet ?? string.Empty));                              // Кодирование сниппета в Base64
                                                                                                                                 // snippet ?? string.Empty - если null, использует пустую строку
                                                                                                                                 // Encoding.UTF8.GetBytes() - преобразует строку в байты UTF-8
                                                                                                                                 // Convert.ToBase64String() - кодирует байты в Base64
                                                                                                                                 // Пример: "# Заголовок\n" → "IyDQl9Cw0LPQu9C10LbQvtC8Cg=="
-            _webView.CoreWebView2.ExecuteScriptAsync($"window.insertSnippet(atob('{b64}'));void(0);");                          // Отправка в JavaScript
+                coreWebView2.ExecuteScriptAsync($"window.insertSnippet(atob('{b64}'));void(0);");                                // Отправка в JavaScript
                                                                                                                                 // ExecuteScriptAsync() - выполняет JS код асинхронно
                                                                                                                                 // window.insertSnippet() - JS функция для вставки сниппета
                                                                                                                                 // atob('{b64}') - JS декодирование Base64
                                                                                                                                 // void(0); - предотвращает возврат значения
+            }
+            catch (InvalidCastException)
+            {
+                // WebView2 еще не готов, игнорируем
+                return;
+            }
+            catch (Exception)
+            {
+                // Другие ошибки тоже игнорируем
+                return;
+            }
         }
 
         //Метод генерирует и вставляет заголовок Markdown соответствующего уровня (от H1 до H6).
@@ -399,14 +478,32 @@ namespace WordMarkdownAddIn.Controls
         /// <param name="mode">Режим отображения: "split", "markdown" или "html"</param>
         public void SetViewMode(string mode)
         {
-            if (!_coreReady || _webView?.CoreWebView2 == null) return;
+            // Безопасная проверка готовности WebView2
+            if (!_coreReady || _webView == null) return;
             
-            // Валидация режима
-            if (mode != "split" && mode != "markdown" && mode != "html")
-                mode = "split";
-            
-            // Вызов JavaScript функции для переключения режима
-            _webView.CoreWebView2.ExecuteScriptAsync($"window.setViewMode('{mode}');void(0);");
+            try
+            {
+                // Проверяем наличие CoreWebView2 безопасным способом
+                var coreWebView2 = _webView.CoreWebView2;
+                if (coreWebView2 == null) return;
+                
+                // Валидация режима
+                if (mode != "split" && mode != "markdown" && mode != "html")
+                    mode = "split";
+                
+                // Вызов JavaScript функции для переключения режима
+                coreWebView2.ExecuteScriptAsync($"window.setViewMode('{mode}');void(0);");
+            }
+            catch (InvalidCastException)
+            {
+                // WebView2 еще не готов, игнорируем ошибку
+                return;
+            }
+            catch (Exception)
+            {
+                // Другие ошибки тоже игнорируем
+                return;
+            }
         }
 
         /// <summary>
@@ -415,17 +512,26 @@ namespace WordMarkdownAddIn.Controls
         /// <returns>Текущий режим: "split", "markdown" или "html"</returns>
         public async Task<string> GetCurrentViewModeAsync()
         {
-            if (!_coreReady || _webView?.CoreWebView2 == null) return "split";
+            if (!_coreReady || _webView == null) return "split";
             
             try
             {
-                var result = await _webView.CoreWebView2.ExecuteScriptAsync("window.getViewMode()");
+                // Безопасная проверка CoreWebView2
+                var coreWebView2 = _webView.CoreWebView2;
+                if (coreWebView2 == null) return "split";
+                
+                var result = await coreWebView2.ExecuteScriptAsync("window.getViewMode()");
                 var mode = UnquoteJsonString(result);
                 
                 // Валидация результата
                 if (mode == "split" || mode == "markdown" || mode == "html")
                     return mode;
                 
+                return "split";
+            }
+            catch (InvalidCastException)
+            {
+                // WebView2 еще не готов
                 return "split";
             }
             catch
@@ -589,54 +695,183 @@ namespace WordMarkdownAddIn.Controls
                 // Переменная для текущего режима отображения
                 let currentViewMode = 'split'; // по умолчанию
                 
-                // Функция переключения режима отображения
-                function setViewMode(mode) {
+                // Флаг для предотвращения рекурсии
+                let setViewModeInProgress = false;
+                let setViewModeRetryCount = 0;
+                const MAX_RETRIES = 5;
+                
+                // Внутренняя функция переключения режима (без вызова postToHost)
+                function applyViewMode(mode, notifyCSharp) {
+                    notifyCSharp = notifyCSharp !== false; // по умолчанию true
+                    
+                    // Валидация режима
+                    if (mode !== 'split' && mode !== 'markdown' && mode !== 'html') {
+                        console.error('Неверный режим:', mode);
+                        mode = 'split';
+                    }
+                    
                     currentViewMode = mode;
+                    const className = 'view-mode-' + mode;
                     
-                    // Удаляем все классы режимов с body
-                    document.body.classList.remove('view-mode-split', 'view-mode-markdown', 'view-mode-html');
-                    
-                    // Добавляем нужный класс
-                    document.body.classList.add('view-mode-' + mode);
-                    
-                    // Обновляем активную кнопку
-                    document.querySelectorAll('.view-btn').forEach(function(btn) {
-                        btn.classList.remove('active');
-                    });
-                    
-                    const activeBtn = document.getElementById('btn-' + mode);
-                    if (activeBtn) {
-                        activeBtn.classList.add('active');
-                    }
-                    
-                    // Сохраняем в localStorage
                     try {
-                        localStorage.setItem('viewMode', mode);
+                        // Удаляем все классы режимов с body
+                        var body = document.body;
+                        var currentClass = body.className || '';
+                        
+                        // Удаляем старые классы режимов
+                        currentClass = currentClass.replace(/view-mode-\w+/g, '').trim();
+                        
+                        // Добавляем новый класс
+                        if (currentClass) {
+                            body.className = currentClass + ' ' + className;
+                        } else {
+                            body.className = className;
+                        }
+                        
+                        // Обновляем активную кнопку
+                        document.querySelectorAll('.view-btn').forEach(function(btn) {
+                            if (btn.classList) {
+                                btn.classList.remove('active');
+                            } else {
+                                btn.className = btn.className.replace(/\s*active\s*/g, ' ').trim();
+                            }
+                        });
+                        
+                        const activeBtn = document.getElementById('btn-' + mode);
+                        if (activeBtn) {
+                            if (activeBtn.classList) {
+                                activeBtn.classList.add('active');
+                            } else {
+                                activeBtn.className = (activeBtn.className + ' active').trim();
+                            }
+                        }
+                        
+                        // Сохраняем в localStorage (с обработкой ошибок)
+                        try {
+                            if (typeof localStorage !== 'undefined' && localStorage !== null) {
+                                localStorage.setItem('viewMode', mode);
+                            }
+                        } catch(e) {
+                            // localStorage недоступен в WebView2 для about:blank - это нормально
+                        }
+                        
+                        // Уведомляем C# о изменении режима (только если нужно)
+                        if (notifyCSharp) {
+                            postToHost('viewModeChanged', mode);
+                        }
+                        
+                        // Отладочный вывод
+                        console.log('Режим переключен на:', mode);
+                        console.log('Класс body:', document.body.className);
                     } catch(e) {
-                        console.error('Ошибка сохранения в localStorage:', e);
+                        console.error('Ошибка в applyViewMode:', e);
+                        // Пытаемся установить класс напрямую
+                        try {
+                            document.body.className = 'view-mode-' + mode;
+                            console.log('Класс установлен напрямую:', document.body.className);
+                        } catch(e2) {
+                            console.error('Критическая ошибка установки класса:', e2);
+                        }
+                    }
+                }
+                
+                // Основная функция переключения режима отображения
+                function setViewMode(mode) {
+                    // Защита от рекурсии
+                    if (setViewModeInProgress) {
+                        console.warn('setViewMode уже выполняется, пропускаем вызов');
+                        return;
                     }
                     
-                    // Уведомляем C# о изменении режима
-                    postToHost('viewModeChanged', mode);
+                    // Проверяем, что body существует
+                    if (!document || !document.body) {
+                        if (setViewModeRetryCount < MAX_RETRIES) {
+                            setViewModeRetryCount++;
+                            console.log('document.body не найден! Попытка ' + setViewModeRetryCount + ' через 200мс...');
+                            setTimeout(function() {
+                                setViewMode(mode);
+                            }, 200);
+                        } else {
+                            console.error('Не удалось найти document.body после ' + MAX_RETRIES + ' попыток');
+                            setViewModeRetryCount = 0;
+                        }
+                        return;
+                    }
+                    
+                    // Сбрасываем счетчик при успехе
+                    setViewModeRetryCount = 0;
+                    setViewModeInProgress = true;
+                    
+                    try {
+                        // Применяем режим с уведомлением C#
+                        applyViewMode(mode, true);
+                    } finally {
+                        // Снимаем флаг после завершения
+                        setViewModeInProgress = false;
+                    }
                 }
                 
                 // Обработчики кнопок переключения режимов
-                document.getElementById('btn-split').addEventListener('click', function() {
-                    setViewMode('split');
-                });
-                
-                document.getElementById('btn-markdown').addEventListener('click', function() {
-                    setViewMode('markdown');
-                });
-                
-                document.getElementById('btn-html').addEventListener('click', function() {
-                    setViewMode('html');
-                });
-                
+
+             
+                // Функция инициализации обработчиков кнопок
+                function initViewModeButtons() {
+                    // Проверяем, что кнопки существуют, перед добавлением обработчиков
+                    const btnSplit = document.getElementById('btn-split');
+                    const btnMarkdown = document.getElementById('btn-markdown');
+                    const btnHtml = document.getElementById('btn-html');
+    
+                    // Добавляем обработчик только если кнопка найдена
+                    if (btnSplit) {
+                        btnSplit.addEventListener('click', function() {
+                            setViewMode('split');
+                        });
+                    } else {
+                        console.error('Кнопка btn-split не найдена!');
+                    }
+    
+                    if (btnMarkdown) {
+                        btnMarkdown.addEventListener('click', function() {
+                            setViewMode('markdown');
+                        });
+                    } else {
+                        console.error('Кнопка btn-markdown не найдена!');
+                    }
+    
+                    if (btnHtml) {
+                        btnHtml.addEventListener('click', function() {
+                            setViewMode('html');
+                        });
+                    } else {
+                        console.error('Кнопка btn-html не найдена!');
+                    }
+                }
+
+                // Вызываем функцию инициализации сразу
+                initViewModeButtons();
+
                 // Функции для вызова из C#
                 window.setViewMode = function(mode) {
+                    // Защита от рекурсии
+                    if (setViewModeInProgress) {
+                        console.warn('window.setViewMode: уже выполняется, пропускаем');
+                        return;
+                    }
+                    
                     if (mode === 'split' || mode === 'markdown' || mode === 'html') {
-                        setViewMode(mode);
+                        // Проверяем, что body существует
+                        if (!document || !document.body) {
+                            console.error('window.setViewMode: document.body не найден');
+                            return;
+                        }
+                        
+                        // Применяем режим БЕЗ уведомления C# (чтобы избежать цикла)
+                        setViewModeInProgress = true;
+                        try {
+                            applyViewMode(mode, false); // false = не уведомлять C#
+                        } finally {
+                            setViewModeInProgress = false;
+                        }
                     }
                 };
                 
@@ -748,18 +983,52 @@ namespace WordMarkdownAddIn.Controls
                 }
 
                 // Инициализация после загрузки
-                setTimeout(function() {
-                    // Загрузка сохраненного режима из localStorage
-                    try {
-                        const saved = localStorage.getItem('viewMode') || 'split';
-                        setViewMode(saved);
-                    } catch(e) {
-                        setViewMode('split');
+                function initializeApp() {
+                    // Проверяем готовность DOM
+                    if (!document.body) {
+                        console.log('DOM еще не готов, повтор через 200мс...');
+                        setTimeout(initializeApp, 200);
+                        return;
                     }
                     
-                    editor.focus();
-                    notifyChange();
-                }, 100);
+                    // Загрузка сохраненного режима из localStorage (с обработкой ошибок)
+                    let savedMode = 'split';
+                    try {
+                        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+                            savedMode = localStorage.getItem('viewMode') || 'split';
+                            console.log('Загружаем сохраненный режим:', savedMode);
+                        } else {
+                            console.log('localStorage недоступен, используем режим по умолчанию: split');
+                        }
+                    } catch(e) {
+                        // localStorage недоступен в WebView2 для about:blank - это нормально
+                        console.log('localStorage недоступен (это нормально для WebView2), используем split');
+                        savedMode = 'split';
+                    }
+                    
+                    // Устанавливаем режим
+                    setViewMode(savedMode);
+
+                    // Инициализируем кнопки еще раз (на всякий случай)
+                    initViewModeButtons();
+                    
+                    // Финальная проверка
+                    setTimeout(function() {
+                        console.log('Финальная проверка класса body:', document.body.className);
+                        if (!document.body.className || document.body.className.indexOf('view-mode-') < 0) {
+                            console.log('Класс не установлен, устанавливаем split...');
+                            setViewMode('split');
+                        }
+                    }, 300);
+                    
+                    if (editor) {
+                        editor.focus();
+                        notifyChange();
+                    }
+                }
+                
+                // Запускаем инициализацию
+                setTimeout(initializeApp, 300);
 
             </script>
         </body>
