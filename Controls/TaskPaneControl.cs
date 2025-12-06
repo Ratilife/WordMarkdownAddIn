@@ -665,6 +665,7 @@ namespace WordMarkdownAddIn.Controls
                     font-family: Consolas, monospace; 
                 }
             </style>
+            <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-okaidia.css"" />
         </head>
         <body>
             <div class=""view-controls"">
@@ -762,9 +763,7 @@ namespace WordMarkdownAddIn.Controls
                         }
                         
                         // Обновляем отображение при переключении режима
-                        if (rawHtml) {
-                            updatePreviewDisplay();
-                        }
+                        updatePreviewDisplay();
                         
                         // Отладочный вывод
                         console.log('Режим переключен на:', mode);
@@ -962,12 +961,23 @@ namespace WordMarkdownAddIn.Controls
 
                 // Функция обновления отображения в зависимости от режима
                 function updatePreviewDisplay() {
-                    if (currentViewMode === 'html') {
-                        // В режиме HTML показываем исходный HTML как текст
-                        preview.innerHTML = '<pre><code>' + escapeHtml(rawHtml) + '</code></pre>';
-                    } else {
-                        // В режиме Split или Markdown рендерим HTML
-                        const clean = DOMPurify.sanitize(rawHtml || '', { 
+                    try {
+                        // Проверяем, что preview существует
+                        if (!preview) {
+                            console.error('preview элемент не найден');
+                            return;
+                        }
+                        
+                        // Во всех режимах рендерим HTML одинаково (отформатированный контент)
+                        const htmlContent = rawHtml || '';
+                        
+                        // Если HTML пустой, просто очищаем preview
+                        if (!htmlContent.trim()) {
+                            preview.innerHTML = '';
+                            return;
+                        }
+                        
+                        const clean = DOMPurify.sanitize(htmlContent, { 
                             ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] 
                         });
                         preview.innerHTML = clean;
@@ -991,6 +1001,8 @@ namespace WordMarkdownAddIn.Controls
                         if (window.MathJax && MathJax.typesetPromise) {
                             MathJax.typesetPromise([preview]).catch(err => console.error(err));
                         }
+                    } catch(e) {
+                        console.error('Ошибка в updatePreviewDisplay:', e);
                     }
                 }
                 
