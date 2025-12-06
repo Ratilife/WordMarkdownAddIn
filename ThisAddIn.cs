@@ -18,18 +18,18 @@ namespace WordMarkdownAddIn
     public partial class ThisAddIn
     {
         // Словари для хранения панелей для каждого окна документа
-        private static Dictionary<Word.Window, CustomTaskPane> _markdownPanes = new Dictionary<Word.Window, CustomTaskPane>();
-        private static Dictionary<Word.Window, Controls.TaskPaneControl> _paneControls = new Dictionary<Word.Window, Controls.TaskPaneControl>();
+        private static Dictionary<Word.Window, CustomTaskPane> _markdownPanes = new Dictionary<Word.Window, CustomTaskPane>();                      //Управление UI панели (видимость, размер, позиция)
+        private static Dictionary<Word.Window, Controls.TaskPaneControl> _paneControls = new Dictionary<Word.Window, Controls.TaskPaneControl>();   // Работа с содержимым (получение/установка Markdown, вставка элементов) 
 
         // Статические свойства для обратной совместимости - возвращают панель для активного документа
-        public static CustomTaskPane MarkdownPane 
+        public static CustomTaskPane MarkdownPane                                                       
         { 
             get 
             {
-                if (Instance?.Application?.ActiveWindow != null)
+                if (Instance?.Application?.ActiveWindow != null)            // Проверяет активное окно
                 {
-                    _markdownPanes.TryGetValue(Instance.Application.ActiveWindow, out var pane);
-                    return pane;
+                    _markdownPanes.TryGetValue(Instance.Application.ActiveWindow, out var pane);  // Получаем значение из словаря
+                    return pane;       // Возвращаем значение панели
                 }
                 return null;
             } 
@@ -39,9 +39,9 @@ namespace WordMarkdownAddIn
         { 
             get 
             {
-                if (Instance?.Application?.ActiveWindow != null)
+                if (Instance?.Application?.ActiveWindow != null)   // Проверяет активное окно
                 {
-                    _paneControls.TryGetValue(Instance.Application.ActiveWindow, out var control);
+                    _paneControls.TryGetValue(Instance.Application.ActiveWindow, out var control);   
                     return control;
                 }
                 return null;
