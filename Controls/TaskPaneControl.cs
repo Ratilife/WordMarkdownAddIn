@@ -117,11 +117,11 @@ namespace WordMarkdownAddIn.Controls
                                                                                                         // Encoding.UTF8.GetBytes(html) - преобразует строку HTML в байты UTF-8
                                                                                                         // Convert.ToBase64String() - кодирует байты в строку Base64
                                                                                                         // Пример: <p>Hello</p> → "PHA+SGVsbG88L3A+"
-                coreWebView2.ExecuteScriptAsync($"window.renderHtml(atob('{b64}'));void(0);");          // Выполнение JavaScript кода
+                coreWebView2.ExecuteScriptAsync($"window.renderHtml(base64ToUtf8('{b64}'));void(0);");  // Выполнение JavaScript кода
                                                                                                         // ExecuteScriptAsync() - асинхронно выполняет JavaScript код в WebView2
                                                                                                         // $"..." - строковая интерполяция C# для подстановки переменных
                                                                                                         // window.renderHtml() - вызов JavaScript функции из C#
-                                                                                                        // atob('{b64}') - JavaScript функция декодирования Base64
+                                                                                                        // base64ToUtf8('{b64}') - правильное декодирование Base64 → UTF-8
                                                                                                         // void(0); - предотвращает возврат значения (оптимизация)
             }
             catch (InvalidCastException)
@@ -167,10 +167,10 @@ namespace WordMarkdownAddIn.Controls
                                                                                                                         // Encoding.UTF8.GetBytes() - преобразует строку в байты UTF-8
                                                                                                                         // Convert.ToBase64String() - кодирует байты в Base64 строку
                                                                                                                         // Пример: "Hello" → "SGVsbG8="    
-                coreWebView2.ExecuteScriptAsync($"window.editorSetValue(atob('{b64}'));void(0);");                      // Отправка в JavaScript
+                coreWebView2.ExecuteScriptAsync($"window.editorSetValue(base64ToUtf8('{b64}'));void(0);");              // Отправка в JavaScript
                                                                                                                         // ExecuteScriptAsync() - выполняет JavaScript код асинхронно
                                                                                                                         // window.editorSetValue() - JS функция для установки значения редактора
-                                                                                                                        // atob('{b64}') - JS функция декодирования Base64
+                                                                                                                        // base64ToUtf8('{b64}') - правильное декодирование Base64 → UTF-8
                                                                                                                         // void(0); - предотвращает возврат значения (оптимизация)
             }
             catch (InvalidCastException)
@@ -250,11 +250,11 @@ namespace WordMarkdownAddIn.Controls
                                                                                                                                 // Пример: "**" → "Kg=="
                 var s = Convert.ToBase64String(Encoding.UTF8.GetBytes(suffix ?? string.Empty));                                 // Аналогично префиксу, но для суффикса
                                                                                                                                 // Пример: "**" → "Kg=="
-                coreWebView2.ExecuteScriptAsync($"window.insertAroundSelection(atob('{p}'), atob('{s}'));void(0);");             // Отправка в JavaScript
+                coreWebView2.ExecuteScriptAsync($"window.insertAroundSelection(base64ToUtf8('{p}'), base64ToUtf8('{s}'));void(0);"); // Отправка в JavaScript
                                                                                                                                 // ExecuteScriptAsync() - выполняет JS код асинхронно
                                                                                                                                 // window.insertAroundSelection() - JS функция для вставки вокруг выделения
-                                                                                                                                // atob('{p}') - JS декодирование Base64 префикса
-                                                                                                                                // atob('{s}') - JS декодирование Base64 суффикса
+                                                                                                                                // base64ToUtf8('{p}') - правильное декодирование Base64 → UTF-8 префикса
+                                                                                                                                // base64ToUtf8('{s}') - правильное декодирование Base64 → UTF-8 суффикса
                                                                                                                                 // void(0); - предотвращает возврат значения
             }
             catch (InvalidCastException)
@@ -282,10 +282,10 @@ namespace WordMarkdownAddIn.Controls
                                                                                                                                 // Encoding.UTF8.GetBytes() - преобразует строку в байты UTF-8
                                                                                                                                 // Convert.ToBase64String() - кодирует байты в Base64
                                                                                                                                 // Пример: "# Заголовок\n" → "IyDQl9Cw0LPQu9C10LbQvtC8Cg=="
-                coreWebView2.ExecuteScriptAsync($"window.insertSnippet(atob('{b64}'));void(0);");                                // Отправка в JavaScript
+                coreWebView2.ExecuteScriptAsync($"window.insertSnippet(base64ToUtf8('{b64}'));void(0);");                        // Отправка в JavaScript
                                                                                                                                 // ExecuteScriptAsync() - выполняет JS код асинхронно
                                                                                                                                 // window.insertSnippet() - JS функция для вставки сниппета
-                                                                                                                                // atob('{b64}') - JS декодирование Base64
+                                                                                                                                // base64ToUtf8('{b64}') - правильное декодирование Base64 → UTF-8
                                                                                                                                 // void(0); - предотвращает возврат значения
             }
             catch (InvalidCastException)
@@ -694,6 +694,7 @@ namespace WordMarkdownAddIn.Controls
                 
                 // Переменная для текущего режима отображения
                 let currentViewMode = 'split'; // по умолчанию
+                let rawHtml = ''; // Храним исходный HTML для режима HTML
                 
                 // Флаг для предотвращения рекурсии
                 let setViewModeInProgress = false;
@@ -758,6 +759,11 @@ namespace WordMarkdownAddIn.Controls
                         // Уведомляем C# о изменении режима (только если нужно)
                         if (notifyCSharp) {
                             postToHost('viewModeChanged', mode);
+                        }
+                        
+                        // Обновляем отображение при переключении режима
+                        if (rawHtml) {
+                            updatePreviewDisplay();
                         }
                         
                         // Отладочный вывод
@@ -883,7 +889,11 @@ namespace WordMarkdownAddIn.Controls
                 function postToHost(type, text) {
                     try {
                         // Правильное кодирование base64
-                        const b64 = btoa(encodeURIComponent(text || ''));
+                        // Правильное кодирование UTF-8 в Base64 для всех символов
+                        function utf8ToBase64(str) {
+                            return btoa(unescape(encodeURIComponent(str || '')));
+                        }
+                        const b64 = utf8ToBase64(text || '');
                         if (window.chrome && window.chrome.webview) {
                             window.chrome.webview.postMessage(type + '|' + b64);
                         }
@@ -950,10 +960,14 @@ namespace WordMarkdownAddIn.Controls
                     notifyChange();
                 }
 
-                window.renderHtml = function(html) {
-                    try {
-                        // Базовая очистка и отображение
-                        const clean = DOMPurify.sanitize(html || '', { 
+                // Функция обновления отображения в зависимости от режима
+                function updatePreviewDisplay() {
+                    if (currentViewMode === 'html') {
+                        // В режиме HTML показываем исходный HTML как текст
+                        preview.innerHTML = '<pre><code>' + escapeHtml(rawHtml) + '</code></pre>';
+                    } else {
+                        // В режиме Split или Markdown рендерим HTML
+                        const clean = DOMPurify.sanitize(rawHtml || '', { 
                             ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] 
                         });
                         preview.innerHTML = clean;
@@ -977,6 +991,50 @@ namespace WordMarkdownAddIn.Controls
                         if (window.MathJax && MathJax.typesetPromise) {
                             MathJax.typesetPromise([preview]).catch(err => console.error(err));
                         }
+                    }
+                }
+                
+                // Функция для экранирования HTML в тексте
+                function escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+                
+                // Функция для правильного декодирования Base64 → UTF-8
+                function base64ToUtf8(base64) {
+                    try {
+                        // Декодируем Base64 в бинарную строку (Latin-1)
+                        const binary = atob(base64);
+                        // Создаём массив байтов
+                        const bytes = new Uint8Array(binary.length);
+                        for (let i = 0; i < binary.length; i++) {
+                            bytes[i] = binary.charCodeAt(i);
+                        }
+                        // Декодируем байты как UTF-8
+                        return new TextDecoder('utf-8').decode(bytes);
+                    } catch(e) {
+                        console.error('Ошибка декодирования Base64:', e);
+                        // Fallback: пробуем простой atob (для совместимости)
+                        try {
+                            return decodeURIComponent(escape(atob(base64)));
+                        } catch(e2) {
+                            console.error('Ошибка fallback декодирования:', e2);
+                            return '';
+                        }
+                    }
+                }
+                
+                // Делаем функцию доступной глобально
+                window.base64ToUtf8 = base64ToUtf8;
+                
+                window.renderHtml = function(html) {
+                    try {
+                        // Сохраняем исходный HTML
+                        rawHtml = html || '';
+                        
+                        // Обновляем отображение в зависимости от текущего режима
+                        updatePreviewDisplay();
                     } catch(e) { 
                         console.error('Ошибка рендеринга:', e); 
                     }
