@@ -15,6 +15,45 @@ using WordMarkdownAddIn.Properties;
 
 namespace WordMarkdownAddIn
 {
+    // <summary>
+    // Главный класс надстройки Word, наследующий от <c>Microsoft.Office.Tools.Ribbon.RibbonBase</c>.
+    // Является точкой входа и центральным компонентом надстройки Markdown Editor.
+    // Отвечает за инициализацию пользовательского интерфейса (панель задач, лента Ribbon),
+    // управление их жизненным циклом, интеграцию с событиями приложения Word
+    // (открытие/сохранение/закрытие документов) и координацию работы между различными модулями надстройки.
+    // </summary>
+    /// <remarks>
+    /// <para><strong>Переменные:</strong></para>
+    /// <list type="bullet">
+    /// <item><term><c>Ribbon</c></term><description>Свойство для доступа к экземпляру пользовательской ленты <c>MarkdownRibbon</c>.</description></item>
+    /// <item><term><c>Properties</c></term><description>Словарь для хранения пользовательских свойств и настроек надстройки.</description></item>
+    /// <item><term><c>Instance</c></term><description>Глобальная ссылка на текущий экземпляр <c>ThisAddIn</c> для доступа из других частей кода.</description></item>
+    /// <item><term><c>_markdownPanes</c></term><description>Словарь, сопоставляющий окна Word с их настраиваемыми панелями задач <c>CustomTaskPane</c>.</description></item>
+    /// <item><term><c>_paneControls</c></term><description>Словарь, сопоставляющий окна Word с их элементами управления редактора Markdown <c>TaskPaneControl</c>.</description></item>
+    /// </list>
+    /// <para><strong>Методы:</strong></para>
+    /// <list type="bullet">
+    /// <item><term><c>ThisAddIn_Startup</c></term><description>Выполняет инициализацию компонентов надстройки при запуске: создает словарь свойств, устанавливает глобальный экземпляр, подписывается на события Word, создает панель для активного окна и инициализирует ленту Ribbon.</description></item>
+    /// <item><term><c>ThisAddIn_Shutdown</c></term><description>Выполняет очистку ресурсов при выгрузке надстройки: отписывается от событий, сохраняет Markdown и настройки, удаляет панели и очищает словари.</description></item>
+    /// <item><term><c>EnsurePaneForWindow</c></term><description>Обеспечивает наличие и настройку панели задач и элемента управления для указанного окна Word.</description></item>
+    /// <item><term><c>Application_DocumentOpen</c></term><description>Обработчик события открытия документа, создающий панель для нового окна.</description></item>
+    /// <item><term><c>Application_WindowActivate</c></term><description>Обработчик события активации окна, гарантирующий наличие панели для активного окна.</description></item>
+    /// <item><term><c>Application_DocumentBeforeClose</c></term><description>Обработчик события перед закрытием документа, сохраняющий Markdown и удаляющий панель.</description></item>
+    /// <item><term><c>Application_DocumentBeforeSave</c></term><description>Обработчик события перед сохранением документа, сохраняющий Markdown в документ.</description></item>
+    /// <item><term><c>TogglePane</c></term><description>Переключает видимость панели задач Markdown, связанной с активным окном.</description></item>
+    /// <item><term><c>LoadMarkdownFromDocument</c></term><description>Загружает Markdown-контент из встроенного XML-фрагмента в документе Word.</description></item>
+    /// <item><term><c>SaveMarkdownToDocument</c></term><description>Сохраняет Markdown-контент в новый или заменяет существующий встроенный XML-фрагмент в документе Word.</description></item>
+    /// <item><term><c>FindExistingPart</c></term><description>Поиск существующего XML-фрагмента с определённым пространством имён в документе.</description></item>
+    /// <item><term><c>BuildMarkdownXml</c></term><description>Формирует XML-строку для хранения Markdown-контента.</description></item>
+    /// <item><term><c>ApplySavedPaneSettings</c></term><description>Применяет сохранённые настройки ширины и видимости к панели задач.</description></item>
+    /// <item><term><c>MarkdownPane</c></term><description>Свойство для получения панели задач, связанной с активным окном.</description></item>
+    /// <item><term><c>PaneControl</c></term><description>Свойство для получения элемента управления редактора Markdown, связанного с активным окном.</description></item>
+    /// </list>
+    /// <para>
+    /// Согласно файлу <c>ThisAddIn.md</c>, класс реализует основной функционал, но требует доработки в части обработки ошибок,
+    /// восстановления состояния панели, синхронизации при переключении документов и полной реализации обработки событий.
+    /// </para>
+    /// </remarks>
     public partial class ThisAddIn
     {
         // Словари для хранения панелей для каждого окна документа
