@@ -221,7 +221,7 @@ namespace WordMarkdownAddIn
             {
                 if (this.Application.ActiveWindow != null && _markdownPanes.TryGetValue(this.Application.ActiveWindow, out var createdPane))
                 {
-                    ApplySavedPaneSettings(createdPane);
+                    //ApplySavedPaneSettings(createdPane);
                 }
             }
             catch (Exception ex) // Обработка ошибок при вызове ApplySavedPaneSettings
