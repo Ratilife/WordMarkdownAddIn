@@ -388,8 +388,8 @@ namespace WordMarkdownAddIn
                 var pane = this.CustomTaskPanes.Add(paneControl, "Markdown", window);
                 
                 // Настраиваем панель
-                pane.Visible = true;
-                pane.DockPosition = Office.MsoCTPDockPosition.msoCTPDockPositionRight;
+                pane.Visible = true;                                                        // делаем панель видимой
+                pane.DockPosition = Office.MsoCTPDockPosition.msoCTPDockPositionRight;      // устанавливаем положение справа
                 
                 // Восстанавливаем сохраненную ширину, если есть
                 if (Properties.ContainsKey("PaneWidth"))
@@ -414,11 +414,11 @@ namespace WordMarkdownAddIn
                 // Загружаем сохраненный Markdown из документа
                 try
                 {
-                    var doc = window.Document;
-                    var md = LoadMarkdownFromDocument(doc);
+                    var doc = window.Document;                  // получаем данные документа
+                    var md = LoadMarkdownFromDocument(doc);     //  Загружает сохранённое содержимое Markdown из указанного документа Word
                     if (!string.IsNullOrEmpty(md))
                     {
-                        paneControl.SetMarkdown(md);
+                        paneControl.SetMarkdown(md);            // Устанавливает Markdown-контент в редакторе веб-интерфейса.
                     }
                 }
                 catch { /* Игнорируем ошибки загрузки */ }
@@ -645,15 +645,18 @@ namespace WordMarkdownAddIn
         /// <returns>Строку с Markdown-контентом, если он найден, или <c>null</c>, если контент отсутствует или произошла ошибка.</returns>
         private string LoadMarkdownFromDocument(Word.Document doc)
         {
+            // Проверяет, является ли переданный документ Word (doc) пустой ссылкой (null).
             if (doc == null) return null;
             try
             {
-                var part = FindExistingPart(doc);
-                if (part == null) return null;
+                var part = FindExistingPart(doc);   // Ищет в документе doc существующую часть (part), которая может содержать markdown.
+                if (part == null) return null;       // Если подходящая часть (part) не найдена, метод возвращает null.
+                // Выполняет XPath-запрос к XML-структуре внутри найденной части (part), чтобы найти узел (node) с тегом 'content', который является дочерним для 'markdown'.
                 var node = part.SelectSingleNode("/*[local-name()='markdown']/*[local-name()='content']");
+                // Если узел (node) с содержимым markdown найден...
                 if (node != null)
                 {
-                    return node.Text;
+                    return node.Text;   // ...возвращает текстовое содержимое этого узла (node).
                 }
             }
             catch { }
@@ -720,15 +723,20 @@ namespace WordMarkdownAddIn
         {
             try
             {
-                Office.CustomXMLParts parts = doc.CustomXMLParts;
-                foreach (Office.CustomXMLPart p in parts)
+                Office.CustomXMLParts parts = doc.CustomXMLParts;  // Получает коллекцию всех пользовательских XML-частей (CustomXMLParts), связанных с документом doc.
+                // Начинает цикл, перебирающий каждую пользовательскую XML-часть (p) в коллекции parts.
+                foreach (Office.CustomXMLPart p in parts)           
                 {
                     try
                     {
+                        // Получает корневой элемент XML-документа, содержащегося в текущей части (p).
                         var root = p.DocumentElement;
+                        // Проверяет, не является ли root пустой ссылкой (null),
+                        // и соответствует ли его пространство имен (NamespaceURI) ожидаемому значению
+                        // из Services.DocumentSyncService.NamespaceUri (с игнорированием регистра).
                         if (root != null && string.Equals(root.NamespaceURI, Services.DocumentSyncService.NamespaceUri, StringComparison.OrdinalIgnoreCase))
                         {
-                            return p;
+                            return p; // Если пространство имен совпадает, возвращает текущую XML-часть (p) как найденную.
                         }
                     }
                     catch { }
@@ -831,8 +839,8 @@ namespace WordMarkdownAddIn
         /// </summary>
         private void InternalStartup()
         {
-            this.Startup += new System.EventHandler(ThisAddIn_Startup);
-            this.Shutdown += new System.EventHandler(ThisAddIn_Shutdown);
+            this.Startup += new System.EventHandler(ThisAddIn_Startup);             // Это означает, что когда Word запускает надстройку, будет автоматически вызван ваш метод ThisAddIn_Startup, где происходит вся начальная настройка (инициализация панели, ленты, подписка на события Word и т.д., как описано в документации).
+            this.Shutdown += new System.EventHandler(ThisAddIn_Shutdown);           // огда Word закрывается или выключает надстройку, будет вызван метод ThisAddIn_Shutdown, где происходят действия по очистке (сохранение настроек, сохранение данных, отписка от событий, удаление панелей и т.п.).
         }
         
         #endregion
