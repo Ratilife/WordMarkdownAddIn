@@ -18,41 +18,137 @@ namespace WordMarkdownAddIn
     public partial class ThisAddIn
     {
         // Словари для хранения панелей для каждого окна документа
+
+        /// <summary>
+        /// Словарь для сопоставления окон Word (<see cref="Word.Window"/>) и связанных с ними
+        /// настраиваемых панелей задач (<see cref="Microsoft.Office.Tools.CustomTaskPane"/>).
+        /// Используется для управления отдельными панелями Markdown в多个 открытых документах Word.
+        /// </summary>
+        /// <remarks>
+        /// Ключом является объект окна Word, значением - экземпляр панели задач,
+        /// созданный для этого окна. Позволяет получить доступ к конкретной панели,
+        /// связанной с активным окном, через свойство <see cref="MarkdownPane"/>.
+        /// </remarks>
         private static Dictionary<Word.Window, CustomTaskPane> _markdownPanes = new Dictionary<Word.Window, CustomTaskPane>();                      //Управление UI панели (видимость, размер, позиция)
+
+        /// <summary>
+        /// Словарь для сопоставления окон Word (<see cref="Word.Window"/>) и связанных с ними
+        /// экземпляров пользовательского элемента управления панели задач (<see cref="Controls.TaskPaneControl"/>).
+        /// </summary>
+        /// <remarks>
+        /// Ключом является объект окна Word, значением - экземпляр <c>TaskPaneControl</c>,
+        /// созданный для этого окна. Используется для управления отдельными экземплярами
+        /// редактора Markdown в открытых документах Word, обеспечивая независимую
+        /// работу с Markdown в каждом активном окне.
+        /// </remarks>
         private static Dictionary<Word.Window, Controls.TaskPaneControl> _paneControls = new Dictionary<Word.Window, Controls.TaskPaneControl>();   // Работа с содержимым (получение/установка Markdown, вставка элементов) 
 
         // Статические свойства для обратной совместимости - возвращают панель для активного документа
+
+        /// <summary>
+        /// Возвращает экземпляр настраиваемой панели задач (CustomTaskPane), 
+        /// связанной с текущим активным окном Microsoft Word.
+        /// </summary>
+        /// <remarks>
+        /// Использует словарь _markdownPanes для получения панели, 
+        /// ассоциированной с ActiveWindow. 
+        /// Возвращает null, если активное окно отсутствует или панель не была создана.
+        /// </remarks>
+        /// <returns>
+        /// Объект <see cref="Microsoft.Office.Tools.CustomTaskPane"/>, 
+        /// представляющий панель задач Markdown для активного окна, 
+        /// или <c>null</c>, если панель недоступна.
+        /// </returns>
         public static CustomTaskPane MarkdownPane                                                       
         { 
             get 
             {
-                if (Instance?.Application?.ActiveWindow != null)            // Проверяет активное окно
+                // Проверяет, существует ли активное окно в приложении Word.
+                if (Instance?.Application?.ActiveWindow != null)           
                 {
-                    _markdownPanes.TryGetValue(Instance.Application.ActiveWindow, out var pane);  // Получаем значение из словаря
-                    return pane;       // Возвращаем значение панели
+                    // Пытается получить панель задач из словаря по ключу активного окна.
+                    _markdownPanes.TryGetValue(Instance.Application.ActiveWindow, out var pane);  
+                    return pane;       // Возвращает найденную панель или null, если ключ отсутствует.
                 }
-                return null;
+                return null;  // Возвращает null, если Instance, Application или ActiveWindow равны null.
             } 
         }
 
+
+        /// <summary>
+        /// Возвращает экземпляр пользовательского элемента управления панели задач (<see cref="Controls.TaskPaneControl"/>),
+        /// связанного с текущим активным окном Microsoft Word.
+        /// </summary>
+        /// <remarks>
+        /// Использует словарь <c>_paneControls</c> для получения элемента управления,
+        /// ассоциированного с <c>ActiveWindow</c>.
+        /// Возвращает <c>null</c>, если активное окно отсутствует или элемент управления
+        /// для этого окна не был создан.
+        /// </remarks>
+        /// <returns>
+        /// Объект <see cref="Controls.TaskPaneControl"/>, представляющий элемент управления
+        /// редактора Markdown для активного окна, или <c>null</c>, если элемент управления недоступен.
+        /// </returns>
         public static Controls.TaskPaneControl PaneControl 
         { 
             get 
             {
-                if (Instance?.Application?.ActiveWindow != null)   // Проверяет активное окно
+                // Проверяет, существует ли активное окно в приложении Word.
+                if (Instance?.Application?.ActiveWindow != null)   
                 {
+                    // Пытается получить элемент управления из словаря по ключу активного окна.
                     _paneControls.TryGetValue(Instance.Application.ActiveWindow, out var control);   
-                    return control;
+                    return control; // Возвращает найденный элемент управления или null, если ключ отсутствует.
                 }
-                return null;
+                return null;  // Возвращает null, если Instance, Application или ActiveWindow равны null.
             } 
         }
 
+        /// <summary>
+        /// Предоставляет доступ к экземпляру настраиваемой ленты (<see cref="MarkdownRibbon"/>) надстройки.
+        /// </summary>
+        /// <value>
+        /// Объект <see cref="MarkdownRibbon"/>, представляющий пользовательский интерфейс ленты Word,
+        /// связанный с этой надстройкой. Устанавливается только внутри класса <see cref="ThisAddIn"/>.
+        /// </value>
         public static MarkdownRibbon Ribbon { get; private set; }
-        public Dictionary<string, object> Properties { get; private set; }
+
+        /// <summary>
+        /// Словарь для хранения пользовательских свойств и настроек надстройки, связанных с активным сеансом.
+        /// </summary>
+        /// <value>
+        /// Объект <see cref="Dictionary{TKey, TValue}"/> с ключами типа <see cref="string"/>
+        /// и значениями типа <see cref="object"/>, который можно использовать для сохранения
+        /// произвольных данных (например, настроек пользовательского интерфейса, состояния).
+        /// Устанавливается и изменяется только внутри класса <see cref="ThisAddIn"/>.
+        /// </value>
+        public Dictionary<string, object> Properties { get; private set; }          //Словарь хранит настройки панели, которые пользователь изменяет:Ширина панели (PaneWidth); Видимость панели (PaneVisible)
+
+        /// <summary>
+        /// Предоставляет глобальный доступ к текущему экземпляру надстройки <see cref="ThisAddIn"/>.
+        /// </summary>
+        /// <value>
+        /// Объект <see cref="ThisAddIn"/>, представляющий запущенный экземпляр надстройки.
+        /// Используется другими модулями для взаимодействия с основным классом надстройки.
+        /// Устанавливается только внутри класса <see cref="ThisAddIn"/>.
+        /// </value>
         public static ThisAddIn Instance { get; private set; }
 
-
+        /// <summary>
+        /// Обработчик события <c>Startup</c> для надстройки <c>ThisAddIn</c>.
+        /// Выполняет начальную инициализацию компонентов надстройки при её запуске.
+        /// </summary>
+        /// <remarks>
+        /// Метод выполняет следующие шаги:
+        /// 1. Инициализирует словарь <c>Properties</c> для хранения настроек.
+        /// 2. Устанавливает статическое свойство <c>Instance</c> для глобального доступа к экземпляру надстройки.
+        /// 3. Подписывается на события приложения Word (<c>DocumentOpen</c>, <c>WindowActivate</c>, <c…   для создания или получения панели задач, связанной с этим окном.
+        /// 5. Создает и инициализирует экземпляр пользовательской ленты <c>MarkdownRibbon</c>.
+        /// В каждом блоке инициализации используется базовая обработка исключений <c>try-catch</c>,
+        /// которая в текущей реализации подавляет ошибки.
+        /// </remarks>
+        /// <param name="sender">Объект, инициировавший событие (обычно сам экземпляр <c>ThisAddIn</c>).</param>
+        /// <param name="e">Аргументы события (не используются в данном методе).</param>
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
             // 1. Инициализируем словарь свойств
@@ -64,10 +160,10 @@ namespace WordMarkdownAddIn
             // 3. Подписываемся на события Word для управления панелями
             try
             {
-                this.Application.DocumentOpen += Application_DocumentOpen;
-                this.Application.WindowActivate += Application_WindowActivate;
-                this.Application.DocumentBeforeClose += Application_DocumentBeforeClose;
-                this.Application.DocumentBeforeSave += Application_DocumentBeforeSave;
+                this.Application.DocumentOpen += Application_DocumentOpen;                  //Срабатывает при открытии документа.
+                this.Application.WindowActivate += Application_WindowActivate;              //Срабатывает при активации окна Word.
+                this.Application.DocumentBeforeClose += Application_DocumentBeforeClose;    //Срабатывает перед закрытием документа.
+                this.Application.DocumentBeforeSave += Application_DocumentBeforeSave;      //Срабатывает перед сохранением документа (используется, например, для автоматического сохранения Markdown).
             }
             catch { }
 
@@ -76,7 +172,7 @@ namespace WordMarkdownAddIn
             {
                 if (this.Application.ActiveWindow != null)
                 {
-                    EnsurePaneForWindow(this.Application.ActiveWindow);
+                    EnsurePaneForWindow(this.Application.ActiveWindow);     //Этот метод отвечает за создание и настройку панели задач (TaskPane) с редактором Markdown для текущего активного окна.
                 }
             }
             catch { /* Игнорируем ошибки при старте */ }
@@ -84,7 +180,7 @@ namespace WordMarkdownAddIn
             // 5. Инициализируем ленту Ribbon
             try
             {
-                Ribbon = new MarkdownRibbon();
+                Ribbon = new MarkdownRibbon();   // Создается новый экземпляр пользовательской ленты MarkdownRibbon и сохраняется в поле Ribbon. Это добавляет на ленту Word новые вкладки, группы и кнопки, определенные в этой ленте.
             }
             catch { }
 
@@ -92,7 +188,7 @@ namespace WordMarkdownAddIn
 
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
         {
-            // 1. Отписываемся от событий Word
+            // 1. Отписываемся от событий Word. Это предотвращает вызов соответствующих обработчиков после выгрузки надстройки.
             try
             {
                 this.Application.DocumentOpen -= Application_DocumentOpen;
@@ -110,9 +206,9 @@ namespace WordMarkdownAddIn
                     if (_markdownPanes.Count > 0)
                     {
                         var firstPane = _markdownPanes.Values.First();
-                        this.Properties["PaneWidth"] = firstPane.Width;
-                        this.Properties["PaneVisible"] = firstPane.Visible;
-                    }
+                        this.Properties["PaneWidth"] = firstPane.Width;     // Сохранили ширину
+                        this.Properties["PaneVisible"] = firstPane.Visible; // Сохранили видимость
+                }
                 
 
             }
