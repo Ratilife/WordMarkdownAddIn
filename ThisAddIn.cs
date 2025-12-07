@@ -177,6 +177,21 @@ namespace WordMarkdownAddIn
             }
             catch { /* Игнорируем ошибки при старте */ }
 
+            // 4.1. Загрузить настройки для созданной панели (если она была создана)
+            try
+            {
+                if (this.Application.ActiveWindow != null && _markdownPanes.TryGetValue(this.Application.ActiveWindow, out var createdPane))
+                {
+                    ApplySavedPaneSettings(createdPane);
+                }
+            }
+            catch (Exception ex) // Обработка ошибок при вызове ApplySavedPaneSettings
+            {
+                System.Diagnostics.Debug.WriteLine($"Error applying saved pane settings at startup: {ex.Message}");
+                // Или, если добавлен логгер:
+                // Logger.LogError(ex, "Error applying saved pane settings at startup.");
+            }
+
             // 5. Инициализируем ленту Ribbon
             try
             {
@@ -186,6 +201,33 @@ namespace WordMarkdownAddIn
 
         }
 
+        /// <summary>
+        /// Обработчик события <c>Shutdown</c> для надстройки <c>ThisAddIn</c>.
+        /// Выполняет очистку ресурсов и завершение работы компонентов надстройки перед её выгрузкой.
+        /// </summary>
+        /// <remarks>
+        /// Метод выполняет следующие шаги:
+        /// 1. Отписка от событий приложения Word: Отменяет подписку на события, чтобы предотвратить
+        ///    попытки вызова обработчиков после выгрузки надстройки.
+        /// 2. Сохранение настроек панели: Пробует сохранить ширину и видимость первой найденной панели
+        ///    задач в словарь <c>Properties</c> для последующего восстановления при следующем запуске.
+        ///    (См. раздел "Что нужно дописать: Восстановление состояния панели" в файле ThisAddIn.md).
+        /// 3. Сохранение Markdown: Перебирает все созданные элементы управления редактора Markdown (<c>_paneControls</c>),
+        ///    извлекает из них актуальное содержимое (используя <c>GetCachedMarkdown</c>) и сохраняет его
+        ///    в соответствующие документы Word с помощью <c>SaveMarkdownToDocument</c>.
+        /// 4. Удаление панелей задач: Удаляет все созданные надстройкой панели задач из коллекции
+        ///    <c>CustomTaskPanes</c> среды Word.
+        /// 5. Очистка внутренних словарей: Очищает словари <c>_markdownPanes</c> и <c>_paneControls</c>,
+        ///    освобождая ссылки на COM-объекты и пользовательские элементы управления.
+        /// 6. Освобождение COM-объекта приложения: *Потенциально проблемный шаг.* Пытается освободить
+        ///    COM-ресурс, связанный с объектом <c>Application</c>. Эта практика может привести к
+        ///    утечкам памяти или нестабильной работе. (См. раздел "Ошибки, которые нужно исправить:
+        ///    Потенциальная утечка COM-объектов" в файле ThisAddIn.md). Рекомендуется удалить этот шаг.
+        /// В каждом блоке используется базовая обработка исключений <c>try-catch</c>,
+        /// которая подавляет ошибки, возникающие во время выполнения этих действий.
+        /// </remarks>
+        /// <param name="sender">Объект, инициировавший событие (обычно сам экземпляр <c>ThisAddIn</c>).</param>
+        /// <param name="e">Аргументы события (не используются в данном методе).</param>
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
         {
             // 1. Отписываемся от событий Word. Это предотвращает вызов соответствующих обработчиков после выгрузки надстройки.
@@ -260,6 +302,38 @@ namespace WordMarkdownAddIn
         }
 
         // Создает панель для указанного окна, если её еще нет
+
+        /// <summary>
+        /// Обеспечивает наличие и корректную инициализацию настраиваемой панели задач Markdown
+        /// (<see cref="CustomTaskPane"/>) и связанного с ней элемента управления (<see cref="Controls.TaskPaneControl"/>)
+        /// для указанного окна Word (<paramref name="window"/>).
+        /// Если панель для данного окна уже существует, метод ничего не делает.
+        /// В противном случае, создает новую панель и элемент управления, настраивает их,
+        /// загружает сохранённое содержимое Markdown из документа и восстанавливает предыдущее состояние.
+        /// </summary>
+        /// <remarks>
+        /// Метод выполняет следующие шаги:
+        /// 1. Проверяет, является ли <paramref name="window"/> допустимым (не null).
+        /// 2. Проверяет, существует ли уже панель, ассоциированная с этим окном в словаре <c>_markdownPanes</c>.
+        ///    Если существует, метод завершает работу.
+        /// 3. Создает новый экземпляр <c>TaskPaneControl</c>.
+        /// 4. Добавляет этот элемент управления в коллекцию <c>CustomTaskPanes</c> Word, привязывая его к <paramref name="window"/>.
+        /// 5. Настраивает свойства панели: делает её видимой, устанавливает положение справа.
+        /// 6. Пытается восстановить ширину и видимость панели из словаря <c>Properties</c>,
+        ///    используя значения, сохранённые при предыдущем сеансе (например, в <c>ThisAddIn_Shutdown</c>).
+        ///    Если значения отсутствуют, устанавливает ширину по умолчанию (600 пикселей).
+        /// 7. Сохраняет созданные объекты панели и элемента управления в словари <c>_markdownPanes</c> и <c>_paneControls</c>,
+        ///    используя <paramref name="window"/> в качестве ключа.
+        /// 8. Пытается загрузить сохранённый Markdown-контент из документа, связанного с <paramref name="window"/>
+        ///    (используя <c>LoadMarkdownFromDocument</c>) и установить его в <c>TaskPaneControl</c> (через <c>SetMarkdown</c>).
+        /// 9. Пытается восстановить сохранённый режим отображения (разделённый, только Markdown, только HTML)
+        ///    из настроек приложения (<c>Settings.Default.ViewMode</c>) и установить его в <c>TaskPaneControl</c>.
+        ///    Использует небольшую задержку для уверенности, что элемент управления (особенно WebView2) инициализирован.
+        /// В блоках инициализации и загрузки используется базовая обработка исключений <c>try-catch</c>,
+        /// которая подавляет ошибки.
+        /// </remarks>
+        /// <param name="window">Объект окна Word (<see cref="Word.Window"/>),
+        /// для которого требуется обеспечить наличие панели задач Markdown.</param>
         private void EnsurePaneForWindow(Word.Window window)
         {
             if (window == null) return;
@@ -330,6 +404,21 @@ namespace WordMarkdownAddIn
         }
 
         // Обработчик открытия документа
+
+        /// <summary>
+        /// Обработчик события <c>DocumentOpen</c> приложения Word.
+        /// Вызывается автоматически при открытии нового документа в Word.
+        /// </summary>
+        /// <remarks>
+        /// Метод пытается найти первое окно (<c>Word.Window</c>), связанное с открытым документом <paramref name="Doc"/>,
+        /// и вызывает метод <c>EnsurePaneForWindow</c> для этого окна.
+        /// <c>EnsurePaneForWindow</c> проверяет, существует ли уже панель задач Markdown для этого окна,
+        /// и если нет — создает новую панель, элемент управл…окумента (в окне) будет доступна своя панель редактора Markdown.
+        /// В текущей реализации обработка исключений подавляет все ошибки, возникающие внутри метода.
+        /// Согласно документации в <c>ThisAddIn.md</c>, это событие является частью функционала подписки на события документов,
+        /// который может потребовать доработки (например, обработка <c>Application.NewDocument</c>).
+        /// </remarks>
+        /// <param name="Doc">Объект <see cref="Word.Document"/>, представляющий только что открытый документ.</param>
         private void Application_DocumentOpen(Word.Document Doc)
         {
             try
@@ -345,6 +434,25 @@ namespace WordMarkdownAddIn
         }
 
         // Обработчик активации окна
+
+        /// <summary>
+        /// Обработчик события <c>WindowActivate</c> приложения Word.
+        /// Вызывается автоматически, когда пользователь переключается между окнами документов Word,
+        /// и одно из окон становится активным.
+        /// </summary>
+        /// <remarks>
+        /// Метод получает объект активированного окна (<paramref name="Wn"/>) и документа (<paramref name="Doc"/>).
+        /// Он проверяет, является ли объект окна допустимым (не null), и если да,
+        /// вызывает метод <c>EnsurePaneForWindow</c> для этого окна.
+        /// <c>EnsurePaneForWindow</c> гарантирует, что для этого окна существует своя панель задач Markdown
+        /// и связанный элемент управления, инициализируя их при необходимости.
+        /// Это позволяет надстройке отслеживать активное окно и, в перспективе, синхронизировать
+        /// содержимое редактора Markdown с соответствующим документом (см. раздел "Синхронизация при переключении документов"
+        /// в файле ThisAddIn.md).
+        /// В текущей реализации обработка исключений подавляет все ошибки, возникающие внутри метода.
+        /// </remarks>
+        /// <param name="Doc">Объект <see cref="Word.Document"/>, связанный с активированным окном.</param>
+        /// <param name="Wn">Объект <see cref="Word.Window"/>, которое стало активным.</param>
         private void Application_WindowActivate(Word.Document Doc, Word.Window Wn)
         {
             try
@@ -359,6 +467,28 @@ namespace WordMarkdownAddIn
         }
 
         // Обработчик закрытия документа
+
+        /// <summary>
+        /// Обработчик события <c>DocumentBeforeClose</c> приложения Word.
+        /// Вызывается автоматически перед закрытием документа.
+        /// </summary>
+        /// <remarks>
+        /// Метод выполняет следующие действия:
+        /// 1. Перебирает словарь <c>_paneControls</c>, сопоставляющий окна Word и элементы управления редактора.
+        /// 2. Находит окно (<c>Word.Window</c>), документ которого (<c>kvp.Key.Document</c>) совпадает с закрываемым <paramref name="Doc"/>.
+        /// 3. Извлекает Markdown-контент из связанного элемента управления (<c>TaskPaneControl</c>) с помощью <c>GetCachedMarkdown</c>.
+        /// 4. Сохраняет извлечённый Markdown в сам документ Word с помощью <c>SaveMarkdownToDocument</c>.
+        /// 5. Удаляет соответствующую панель задач (<c>CustomTaskPane</c>) из коллекции <c>CustomTaskPanes</c> Word.
+        /// 6. Удаляет записи для найденного окна из внутренних словарей <c>_markdownPanes</c> и <c>_paneControls</c>,
+        ///    освобождая ресурсы и предотвращая утечки памяти.
+        /// Этот метод реализует функционал, отмеченный в <c>ThisAddIn.md</c> как "✅ Обработка событий",
+        /// а именно обработку <c>Application_DocumentBeforeClose</c>, и частично решает задачу из раздела
+        /// "❌ Отсутствие обработки закрытия документа", обеспечивая сохранение Markdown при закрытии документа.
+        /// В текущей реализации обработка исключений подавляет все ошибки, возникающие внутри метода и вложенных операций.
+        /// </remarks>
+        /// <param name="Doc">Объект <see cref="Word.Document"/>, который будет закрыт.</param>
+        /// <param name="Cancel">Ссылка на логическую переменную (<see langword="ref bool"/>),
+        /// позволяющую отменить закрытие документа. В текущей реализации не используется для отмены.</param>
         private void Application_DocumentBeforeClose(Word.Document Doc, ref bool Cancel)
         {
             try
@@ -402,6 +532,20 @@ namespace WordMarkdownAddIn
             catch { }
         }
 
+        /// <summary>
+        /// Обработчик события <c>DocumentBeforeSave</c> приложения Word.
+        /// Вызывается автоматически перед сохранением документа Word.
+        /// </summary>
+        /// <remarks>
+        /// Метод выполняет следующие действия:
+        /// 1. Перебирает словарь <c>_paneControls</c>, сопоставляющий окна Word и элементы управления редактора.
+        /// 2. Находит элемент управления (<c>TaskPaneControl</c>), связанный с сохраняемым документом <paramref name="Doc"/>.
+        ///    Это делается путем поиска окна (<c>kvp.Key</c>), докумен…авления с помощью метода <c>GetCachedMarkdown</c>.
+       /// <param name="Doc">Объект <see cref="Word.Document"/>, который будет сохранён.</param>
+        /// <param name="SaveAsUI">Ссылка на логическую переменную (<see langword="ref bool"/>),
+        /// указывающую, будет ли отображаться диалоговое окно "Сохранить как".</param>
+        /// <param name="Cancel">Ссылка на логическую переменную (<see langword="ref bool"/>),
+        /// позволяющую отменить операцию сохранения. В текущей реализации не используется для отмены.</param>
         private void Application_DocumentBeforeSave(Word.Document Doc, ref bool SaveAsUI, ref bool Cancel)
         {
             try
@@ -420,8 +564,21 @@ namespace WordMarkdownAddIn
             catch { }
         }
 
-      
 
+        /// <summary>
+        /// Переключает видимость настраиваемой панели задач Markdown, связанной с активным окном Word.
+        /// Если панель в данный момент видима, она скрывается; если скрыта — отображается.
+        /// </summary>
+        /// <remarks>
+        /// Метод использует статическое свойство <see cref="MarkdownPane"/> для получения
+        /// текущей панели задач, ассоциированной с активным окном.
+        /// Если <see cref="MarkdownPane"/> возвращает <c>null</c> (например, если активное окно
+        /// недоступно или для него не была создана панель), метод завершает работу без ошибки.
+        /// Согласно документации в <c>ThisAddIn.md</c>, в текущей реализации отсутствует
+        /// проверка на <c>null</c> перед обращением к свойствам панели (хотя в приведённом коде
+        /// такая проверка <c>if (pane != null)</c> присутствует). Также отмечено, что не реализована
+        /// связь между состоянием видимости панели и кнопкой в ленте Ribbon.
+        /// </remarks>
         public void TogglePane()
         {
             var pane = MarkdownPane;
@@ -432,6 +589,21 @@ namespace WordMarkdownAddIn
         }
 
         // Вспомогательные методы для работы с Markdown конкретного документа
+
+        /// <summary>
+        /// Загружает сохранённое содержимое Markdown из указанного документа Word.
+        /// Метод ищет встроенный фрагмент XML (CustomXMLPart) с определённым пространством имён,
+        /// где предположительно хранится Markdown-контент.
+        /// </summary>
+        /// <remarks>
+        /// Алгоритм работы метода:
+        /// 1. Проверяет, является ли переданный документ <paramref name="doc"/> допустимым (не null).
+        ///    Если документ null, метод возвращает null.
+        /// 2. Вызывает метод <c>FindExistingPart(doc)</c>, который ищет в документе
+       /// В текущей реализации обработка исключений <c>catch { }</c> подавляет все ошибки, что затрудняет диагностику.
+        /// </remarks>
+        /// <param name="doc">Объект <see cref="Word.Document"/>, из которого нужно загрузить Markdown.</param>
+        /// <returns>Строку с Markdown-контентом, если он найден, или <c>null</c>, если контент отсутствует или произошла ошибка.</returns>
         private string LoadMarkdownFromDocument(Word.Document doc)
         {
             if (doc == null) return null;
@@ -449,6 +621,29 @@ namespace WordMarkdownAddIn
             return null;
         }
 
+        /// <summary>
+        /// Сохраняет указанный Markdown-контент в виде встроенного фрагмента XML (CustomXMLPart)
+        /// в указанный документ Word.
+        /// Если в документе уже существует фрагмент XML, созданный этой надстройкой (с тем же пространством имён),
+        /// он удаляется перед добавлением нового.
+        /// </summary>
+        /// <remarks>
+        /// Алгоритм работы метода:
+        /// 1. Проверяет, является ли переданный документ <paramref name="doc"/> допустимым (не null).
+        ///    Если документ null, метод завершает работу.
+        /// 2. Вызывает метод <c>FindExistingPart(doc)</c>, чтобы проверить,
+        ///    существует ли уже <c>CustomXMLPart</c> с определённым пространством имён, созданный надстройкой.
+        /// 3. Если такой фрагмент найден, он удаляется с помощью <c>existing.Delete()</c>.
+        /// 4. Вызывается метод <c>BuildMarkdownXml</c>, который формирует XML-строку,
+        ///    содержащую переданный <paramref name="markdown"/> в определённой структуре (например, внутри тега &lt;content&gt;).
+        /// 5. Сформированная XML-строка добавляется в коллекцию <c>CustomXMLParts</c> документа
+        ///    с помощью <c>doc.CustomXMLParts.Add()</c>.
+        /// Согласно документации в <c>ThisAddIn.md</c>, этот метод реализует функционал "✅ Интеграция с Word",
+        /// а именно "Подписка на событие `DocumentBeforeSave` для автоматического сохранения Markdown".
+        /// В текущей реализации обработка исключений <c>catch { }</c> подавляет все ошибки, что скрывает потенциальные проблемы.
+        /// </remarks>
+        /// <param name="doc">Объект <see cref="Word.Document"/>, в который нужно сохранить Markdown.</param>
+        /// <param name="markdown">Строка с Markdown-контентом, которую нужно сохранить.</param>
         private void SaveMarkdownToDocument(Word.Document doc, string markdown)
         {
             if (doc == null) return;
@@ -465,6 +660,23 @@ namespace WordMarkdownAddIn
             catch { }
         }
 
+        /// <summary>
+        /// Ищет и возвращает существующий встроенный фрагмент XML (<see cref="Office.CustomXMLPart"/>)
+        /// в указанном документе Word, который соответствует пространству имён, определённому
+        /// в <see cref="Services.DocumentSyncService.NamespaceUri"/>.
+        /// Используется для поиска ранее сохранённого фрагмента, содержащего Markdown-контент.
+        /// </summary>
+        /// <remarks>
+        /// Метод перебирает все фрагменты <c>CustomXMLPart</c>, находящиеся в коллекции <c>CustomXMLParts</c>
+        /// переданного доку…e="doc"/>.
+        /// Для каждого фрагмента он пытается получить его корневой элемент (<c>p.DocumentElement</c>).
+        /// что затрудняет диагностику проблем (см. раздел "❌ Улучшить обработку исключений").
+        /// </remarks>
+        /// <param name="doc">Объект <see cref="Word.Document"/>, в котором нужно искать фрагмент.</param>
+        /// <returns>
+        /// Объект <see cref="Office.CustomXMLPart"/>, если он найден, или <c>null</c>,
+        /// если фрагмент с указанным пространством имён отсутствует или произошла ошибка.
+        /// </returns>
         private Office.CustomXMLPart FindExistingPart(Word.Document doc)
         {
             try
@@ -487,11 +699,89 @@ namespace WordMarkdownAddIn
             return null;
         }
 
+        /// <summary>
+        /// Формирует XML-строку для хранения Markdown-контента во встроенном фрагменте XML (<c>CustomXMLPart</c>) документа Word.
+        /// </summary>
+        /// <remarks>
+        /// Метод принимает строку <paramref name="content"/> с Markdown-разметкой и встраивает её внутрь
+        /// XML-структуры с корневым элементом <c>&lt;md:markdown&gt;</c> и дочерним элементом <c>&lt;md:content&gt;</c>.
+        /// Пространство имён <c>md</c> определяется константой <c>Services.DocumentSyncService.NamespaceUri</c>.
+        /// Для безопасн… добавлена в документ Word с помощью <c>doc.CustomXMLParts.Add()</c>
+        /// (см. метод <c>SaveMarkdownToDocument</c>).
+        /// Согласно документации в <c>ThisAddIn.md</c>, этот метод используется при сохранении Markdown в документ.
+        /// </remarks>
+        /// <param name="content">Строка с Markdown-контентом, который нужно включить в XML.
+        /// Если передано <c>null</c>, будет сохранена пустая строка (как обработано в вызывающем коде).</param>
+        /// <returns>Сформированная XML-строка с Markdown-контентом.</returns>
         private string BuildMarkdownXml(string content)
         {
             return "<md:markdown xmlns:md='" + Services.DocumentSyncService.NamespaceUri + "'>" +
                 "<md:content><![CDATA[" + content + "]]></md:content>" +
                 "</md:markdown>";
+        }
+
+        /// <summary>
+        /// Применяет сохранённые настройки ширины и видимости к указанной панели задач (<paramref name="pane"/>).
+        /// Настройки считываются из словаря <see cref="Properties"/> текущего экземпляра надстройки.
+        /// </summary>
+        /// <remarks>
+        /// Метод проверяет наличие ключей "PaneWidth" и "PaneVisible" в словаре <c>this.Properties</c>.
+        /// Если ключ "PaneWidth" существует, метод пытается преобразовать его значение к типу <c>int</c>
+        /// и установить его в качестве ширины панели <paramref name=…допустимо или преобразование не удается, соответствующая настройка
+        /// панели остается без изменений. Обработка исключений происходит для каждой настройки отдельно,
+        /// ошибки не влияют на применение других настроек. Этот метод решает задачу, описанную в
+        /// <c>ThisAddIn.md</c> в разделе "❌ Восстановление состояния панели: Загрузка сохраненных настроек".
+        /// </remarks>
+        /// <param name="pane">Объект <see cref="Microsoft.Office.Tools.CustomTaskPane"/>,
+        /// к которому применяются настройки.</param>
+        private void ApplySavedPaneSettings(Microsoft.Office.Tools.CustomTaskPane pane)
+        {
+            // Проверяем, существуют ли сохраненные настройки в Properties
+            if (this.Properties.ContainsKey("PaneWidth"))
+            {
+                try
+                {
+                    // Пробуем получить сохраненное значение ширины
+                    var savedWidthObj = this.Properties["PaneWidth"];
+                    if (savedWidthObj != null && int.TryParse(savedWidthObj.ToString(), out int savedWidth))
+                    {
+                        // Устанавливаем ширину панели
+                        pane.Width = savedWidth;
+                        // Логирование (опционально)
+                        // System.Diagnostics.Debug.WriteLine($"Loaded PaneWidth: {savedWidth}");
+                    }
+                }
+                catch (Exception ex) // Лучше использовать конкретный тип исключения, если известен
+                {
+                    // Используем логирование или показываем сообщение
+                    System.Diagnostics.Debug.WriteLine($"Error loading PaneWidth: {ex.Message}");
+                    // Или, если добавлен логгер:
+                    // Logger.LogWarning(ex, "Error loading PaneWidth from Properties.");
+                }
+            }
+
+            if (this.Properties.ContainsKey("PaneVisible"))
+            {
+                try
+                {
+                    // Пробуем получить сохраненное значение видимости
+                    var savedVisibleObj = this.Properties["PaneVisible"];
+                    if (savedVisibleObj != null && bool.TryParse(savedVisibleObj.ToString(), out bool savedVisible))
+                    {
+                        // Устанавливаем видимость панели
+                        pane.Visible = savedVisible;
+                        // Логирование (опционально)
+                        // System.Diagnostics.Debug.WriteLine($"Loaded PaneVisible: {savedVisible}");
+                    }
+                }
+                catch (Exception ex) // Лучше использовать конкретный тип исключения, если известен
+                {
+                    // Используем логирование или показываем сообщение
+                    System.Diagnostics.Debug.WriteLine($"Error loading PaneVisible: {ex.Message}");
+                    // Или, если добавлен логгер:
+                    // Logger.LogWarning(ex, "Error loading PaneVisible from Properties.");
+                }
+            }
         }
 
         #region Код, автоматически созданный VSTO

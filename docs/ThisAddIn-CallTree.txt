@@ -1,0 +1,172 @@
+ГРАФ ВЫЗОВОВ МЕТОДОВ КЛАССА ThisAddIn
+========================================
+
+ТОЧКА ВХОДА
+└── InternalStartup (строка 725)
+    ├── Подписка: ThisAddIn_Startup (строка 727)
+    └── Подписка: ThisAddIn_Shutdown (строка 728)
+
+═══════════════════════════════════════════════════════════════════════════
+
+ОБРАБОТЧИКИ СОБЫТИЙ
+═══════════════════════════════════════════════════════════════════════════
+
+1. ThisAddIn_Startup (строка 152)
+   ├── EnsurePaneForWindow (строка 175)
+   │   ├── LoadMarkdownFromDocument (строка 379)
+   │   │   └── FindExistingPart (строка 612)
+   │   ├── paneControl.SetMarkdown() [ВНЕШНИЙ]
+   │   └── paneControl.SetViewMode() [ВНЕШНИЙ]
+   ├── ApplySavedPaneSettings (строка 185)
+   └── new MarkdownRibbon() [ВНЕШНИЙ]
+
+2. ThisAddIn_Shutdown (строка 231)
+   ├── paneControl.GetCachedMarkdown() [ВНЕШНИЙ]
+   └── SaveMarkdownToDocument (строка 270)
+       ├── FindExistingPart (строка 629)
+       └── BuildMarkdownXml (строка 634)
+
+3. Application_DocumentOpen (строка 422)
+   └── EnsurePaneForWindow (строка 430)
+       ├── LoadMarkdownFromDocument (строка 379)
+       │   └── FindExistingPart (строка 612)
+       ├── paneControl.SetMarkdown() [ВНЕШНИЙ]
+       └── paneControl.SetViewMode() [ВНЕШНИЙ]
+
+4. Application_WindowActivate (строка 456)
+   └── EnsurePaneForWindow (строка 463)
+       ├── LoadMarkdownFromDocument (строка 379)
+       │   └── FindExistingPart (строка 612)
+       ├── paneControl.SetMarkdown() [ВНЕШНИЙ]
+       └── paneControl.SetViewMode() [ВНЕШНИЙ]
+
+5. Application_DocumentBeforeClose (строка 492)
+   ├── paneControl.GetCachedMarkdown() [ВНЕШНИЙ]
+   └── SaveMarkdownToDocument (строка 507)
+       ├── FindExistingPart (строка 629)
+       └── BuildMarkdownXml (строка 634)
+
+6. Application_DocumentBeforeSave (строка 549)
+   ├── paneControl.GetCachedMarkdown() [ВНЕШНИЙ]
+   └── SaveMarkdownToDocument (строка 559)
+       ├── FindExistingPart (строка 629)
+       └── BuildMarkdownXml (строка 634)
+
+═══════════════════════════════════════════════════════════════════════════
+
+ПУБЛИЧНЫЕ МЕТОДЫ
+═══════════════════════════════════════════════════════════════════════════
+
+7. TogglePane (строка 582)
+   └── MarkdownPane [СВОЙСТВО] (строка 584)
+
+═══════════════════════════════════════════════════════════════════════════
+
+ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+═══════════════════════════════════════════════════════════════════════════
+
+8. LoadMarkdownFromDocument (строка 607)
+   └── FindExistingPart (строка 612)
+
+9. SaveMarkdownToDocument (строка 624)
+   ├── FindExistingPart (строка 629)
+   └── BuildMarkdownXml (строка 634)
+
+10. FindExistingPart (строка 640)
+    └── [НЕТ ВЫЗОВОВ МЕТОДОВ КЛАССА]
+
+11. BuildMarkdownXml (строка 662)
+    └── [НЕТ ВЫЗОВОВ МЕТОДОВ КЛАССА]
+
+12. ApplySavedPaneSettings (строка 669)
+    └── [НЕТ ВЫЗОВОВ МЕТОДОВ КЛАССА]
+
+═══════════════════════════════════════════════════════════════════════════
+
+СВОЙСТВА
+═══════════════════════════════════════════════════════════════════════════
+
+MarkdownPane (getter, строка 62)
+└── Использует: Instance, Application, ActiveWindow, _markdownPanes
+
+PaneControl (getter, строка 92)
+└── Использует: Instance, Application, ActiveWindow, _paneControls
+
+═══════════════════════════════════════════════════════════════════════════
+
+ОСНОВНЫЕ ЦЕПОЧКИ ВЫЗОВОВ
+═══════════════════════════════════════════════════════════════════════════
+
+ЦЕПОЧКА 1: Инициализация при старте
+────────────────────────────────────
+InternalStartup
+  └─> ThisAddIn_Startup
+      └─> EnsurePaneForWindow
+          └─> LoadMarkdownFromDocument
+              └─> FindExistingPart
+
+ЦЕПОЧКА 2: Сохранение при закрытии надстройки
+──────────────────────────────────────────────
+ThisAddIn_Shutdown
+  └─> SaveMarkdownToDocument
+      ├─> FindExistingPart
+      └─> BuildMarkdownXml
+
+ЦЕПОЧКА 3: Сохранение при закрытии документа
+─────────────────────────────────────────────
+Application_DocumentBeforeClose
+  └─> SaveMarkdownToDocument
+      ├─> FindExistingPart
+      └─> BuildMarkdownXml
+
+ЦЕПОЧКА 4: Сохранение перед сохранением документа
+──────────────────────────────────────────────────
+Application_DocumentBeforeSave
+  └─> SaveMarkdownToDocument
+      ├─> FindExistingPart
+      └─> BuildMarkdownXml
+
+ЦЕПОЧКА 5: Открытие документа
+──────────────────────────────
+Application_DocumentOpen
+  └─> EnsurePaneForWindow
+      └─> LoadMarkdownFromDocument
+          └─> FindExistingPart
+
+ЦЕПОЧКА 6: Активация окна
+──────────────────────────
+Application_WindowActivate
+  └─> EnsurePaneForWindow
+      └─> LoadMarkdownFromDocument
+          └─> FindExistingPart
+
+═══════════════════════════════════════════════════════════════════════════
+
+СТАТИСТИКА
+═══════════════════════════════════════════════════════════════════════════
+
+Всего методов в классе: 14
+  - Обработчиков событий: 6
+  - Публичных методов: 1
+  - Приватных методов: 7
+  - Свойств (getters): 2
+
+Методы, вызывающие другие методы класса: 8
+Методы, не вызывающие методы класса: 6
+
+Самый часто вызываемый метод: EnsurePaneForWindow (4 раза)
+Самый часто вызываемый вспомогательный метод: FindExistingPart (4 раза)
+
+═══════════════════════════════════════════════════════════════════════════
+
+ВНЕШНИЕ ВЫЗОВЫ (не из класса ThisAddIn)
+═══════════════════════════════════════════════════════════════════════════
+
+- paneControl.GetCachedMarkdown() - вызывается 3 раза
+- paneControl.SetMarkdown() - вызывается 1 раз
+- paneControl.SetViewMode() - вызывается 1 раз
+- new MarkdownRibbon() - вызывается 1 раз
+- doc.CustomXMLParts.Add() - вызывается 1 раз
+
+═══════════════════════════════════════════════════════════════════════════
+
