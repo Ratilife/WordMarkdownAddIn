@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Microsoft.Office.Interop.Word;
 
 namespace WordMarkdownAddIn.Services
@@ -24,15 +25,36 @@ namespace WordMarkdownAddIn.Services
         {
             var elements = new List<IWordElement>();
 
-           
+            elements = ExtractParagraphs(elements);
+            elements = ExtractTables(elements);
+
+
             return elements; 
         
         }
 
         // 1. Таблицы
-        private void ExtractTables() 
+        private List<IWordElement> ExtractTables(List<IWordElement> elements) 
         {
-        
+            foreach (Table table in _activeDoc.Tables)
+            {
+                var tableData = new List<List<string>>();
+
+                for (int i = 1; i <= table.Rows.Count; i++)
+                {
+                    var rowData = new List<string>();
+                    for (int j = 1; j <= table.Columns.Count; j++)
+                    {
+                        string cellText = table.Cell(i, j).Range.Text.TrimEnd('\r', '\a');
+                        rowData.Add(cellText);
+                    }
+                    tableData.Add(rowData);
+                }
+
+                elements.Add(new WordTable { Rows = tableData});
+            }
+            return elements;
+
         }
 
         // 2. Параграфы
