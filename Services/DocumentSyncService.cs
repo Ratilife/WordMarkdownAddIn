@@ -11,9 +11,17 @@ namespace WordMarkdownAddIn.Services
 {
     public static class DocumentSyncService
     {
+        /// <summary>
+        /// Пространство имён XML, используемое для элементов, связанных с исходным Markdown-контентом.
+        /// </summary>
         public const string NamespaceUri = "urn:markdown/source";    // определяет уникальный идентификатор для разметки, связанной с Markdown-контентом в документе Word.
 
-      
+        /// <summary>
+        /// Загружает Markdown-содержимое из XML-части активного документа Word.
+        /// </summary>
+        /// <param name="app">Объект приложения Microsoft Word.</param>
+        /// <returns>Строка с Markdown-содержимым или <c>null</c>, если документ не активен, 
+        /// XML-часть не найдена или не содержит данных.</returns>
         public static string LoadMarkdownFromActiveDocument(Word.Application app)
         {
             //Проверить - доступен ли Word и активный документ
@@ -39,6 +47,13 @@ namespace WordMarkdownAddIn.Services
             return null;
         }
 
+
+        /// <summary>
+        /// Сохраняет Markdown-содержимое в активный документ Word как пользовательскую XML-часть.
+        /// Если в документе уже существует сохранённая версия Markdown, она удаляется перед добавлением новой.
+        /// </summary>
+        /// <param name="app">Объект приложения Microsoft Word.</param>
+        /// <param name="markdown">Строка с Markdown-содержимым для сохранения.</param>
         public static void SaveMarkdownToActiveDocument(Word.Application app, string markdown)   
         {
             //Проверить - есть ли доступный документ Word
@@ -59,6 +74,13 @@ namespace WordMarkdownAddIn.Services
 
         }
 
+
+        /// <summary>
+        /// Создаёт XML-строку с Markdown-содержимым, обёрнутым в CDATA.
+        /// </summary>
+        /// <param name="content">Markdown-содержимое, которое нужно включить в XML.</param>
+        /// <returns>Строка в формате XML с корневым элементом 'markdown' и дочерним элементом 'content',
+        /// где содержимое заключено в секцию CDATA.</returns>
         private static string BuildXml(string content)
         {
             // Обернуть markdown в CDATA внутри корневого пространства имен
@@ -70,8 +92,14 @@ namespace WordMarkdownAddIn.Services
                                                                                                                     // оборачивает content в <![CDATA[ ... ]]>
                                                                                                                     // CDATA предотвращает интерпретацию специальных XML-символов
                 "</md:markdown>";                                                                                   // завершает корневой элемент                                                                                     
-        }                                                                                                           
+        }
 
+
+        /// <summary>
+        /// Находит существующую пользовательскую XML-часть в документе, соответствующую пространству имён Markdown.
+        /// </summary>
+        /// <param name="doc">Документ Word, в котором выполняется поиск.</param>
+        /// <returns>Объект <see cref="Office.CustomXMLPart"/>, если часть найдена; в противном случае — <c>null</c>.</returns>
         private static Office.CustomXMLPart FindExistingPart(Word.Document doc)
         {
             // Получить все пользовательские XML-части документа

@@ -105,6 +105,19 @@ namespace WordMarkdownAddIn.Controls
             catch {/* ignore malformed messages */ }
         }
 
+
+        /// <summary>
+        /// Асинхронно отображает HTML-содержимое в элементе управления WebView2.
+        /// Метод проверяет готовность компонента WebView2, кодирует переданный HTML в Base64,
+        /// передаёт его в JavaScript-функцию renderHtml, выполняемую внутри WebView2, для отображения.
+        /// Обрабатывает возможные исключения, связанные с состоянием WebView2.
+        /// </summary>
+        /// <param name="html">Строка HTML-разметки, которая будет отображена.</param>
+        /// <returns>Метод не возвращает значение (void). Вызов асинхронный.</returns>
+        /// <remarks>
+        /// Требует, чтобы _webView и его CoreWebView2 были инициализированы и готовы к взаимодействию.
+        /// Использует JavaScript-функцию `window.renderHtml` и вспомогательную функцию `base64ToUtf8` в браузере.
+        /// </remarks>
         private void PostRenderHtml(string html) 
         {
             if (!_coreReady || _webView == null) return;                                                // Проверка готовности WebView2
@@ -188,6 +201,19 @@ namespace WordMarkdownAddIn.Controls
         public string GetCachedMarkdown() => _latestMarkdown;          //предоставляет мгновенный доступ к последнему известному состоянию Markdown-текста без обращения к JavaScript.
 
         //Метод предоставляет надежный способ получения актуального Markdown-текста,используя кэш, но при необходимости запрашивая данные из JavaScript.
+        /// <summary>
+        /// Асинхронно возвращает Markdown-содержимое редактора.
+        /// Сначала пытается получить значение из кэша (<see cref="_latestMarkdown"/>).
+        /// Если кэш пуст или не инициализирован, и компонент WebView2 готов,
+        /// делает асинхронный запрос к JavaScript-редактору через <c>window.editorGetValue()</c>,
+        /// обрабатывает результат и возвращает его.
+        /// </summary>
+        /// <returns>Задача (Task), результатом которой является строка Markdown-содержимого.
+        /// Возвращает пустую строку, если кэш пуст и запрос к JavaScript не удался или WebView2 не готов.</returns>
+        /// <remarks>
+        /// Использует кэшированное значение, обновляемое, например, через <c>mdChanged</c>, для оптимизации.
+        /// В случае ошибки возвращается пустая строка.
+        /// </remarks>
         public async Task<string> GetMarkdownAsync()
         {
             //  Возвращает кэшированное значение (синхронизируется с помощью mdChanged). При необходимости можно вернуться к JS-запросу.
@@ -219,6 +245,16 @@ namespace WordMarkdownAddIn.Controls
         }
 
         // Метод обрабатывает строки, возвращаемые из JavaScript, которые могут быть в JSON-формате с экранированными символами.
+        /// <summary>
+        /// Удаляет внешние кавычки из строки JSON и декодирует экранированные управляющие символы.
+        /// </summary>
+        /// <param name="jsonQuoted">Строка, представляющая собой JSON-значение (обычно строку), полученное, например, из JavaScript.</param>
+        /// <returns>Обработанная строка без внешних кавычек и с восстановленными управляющими символами (\n, \t, \", и т.д.).
+        /// Возвращает пустую строку, если входное значение null или пустое.</returns>
+        /// <remarks>
+        /// Используется для обработки строк, полученных из <c>WebView2.ExecuteScriptAsync</c>, 
+        /// так как результат выполнения JavaScript-кода возвращается в формате JSON.
+        /// </remarks>
         private static string UnquoteJsonString(string jsonQuoted)
         {
             if (string.IsNullOrEmpty(jsonQuoted)) return string.Empty;                                                          //Защита от null или пустых входных данны
@@ -236,6 +272,17 @@ namespace WordMarkdownAddIn.Controls
         }
 
         //Метод добавляет префикс и суффикс вокруг выделенного текста в редакторе (например, для жирного текста или кода)
+        /// <summary>
+        /// Асинхронно вставляет указанные строки префикса и суффикса вокруг текущего выделения в редакторе, размещенном в WebView2.
+        /// Использует JavaScript-функцию <c>window.insertAroundSelection</c> для выполнения вставки на стороне редактора.
+        /// Префиксы и суффиксы передаются в JavaScript в виде закодированных в Base64 строк UTF-8, чтобы избежать проблем с экранированием.
+        /// </summary>
+        /// <param name="prefix">Строка, которая будет вставлена перед выделенным текстом. Может быть null или пустой.</param>
+        /// <param name="suffix">Строка, которая будет вставлена после выделенного текста. Может быть null или пустой.</param>
+        /// <remarks>
+        /// Метод ничего не делает, если компонент WebView2 не инициализирован или недоступен.
+        /// Все возникающие исключения игнорируются.
+        /// </remarks>
         public void InsertInline(string prefix, string suffix)
         {
             if (!_coreReady || _webView == null) return;                                                                        //_coreReady - флаг инициализации WebView2
@@ -268,7 +315,18 @@ namespace WordMarkdownAddIn.Controls
                 return;
             }
         }
+        
         //Метод вставляет предопределенные блоки Markdown(заголовки, списки, таблицы) в текущую позицию курсора.
+        /// <summary>
+        /// Асинхронно вставляет указанный текстовый фрагмент (сниппет) в редактор, размещенный в WebView2.
+        /// Использует JavaScript-функцию <c>window.insertSnippet</c> для выполнения вставки.
+        /// Сниппет передаётся в JavaScript в виде закодированной в Base64 строки UTF-8.
+        /// </summary>
+        /// <param name="snippet">Текст сниппета для вставки. Может быть null или пустой строкой.</param>
+        /// <remarks>
+        /// Метод ничего не делает, если компонент WebView2 не инициализирован или недоступен.
+        /// Все возникающие исключения игнорируются.
+        /// </remarks>
         public void InsertSnippet(string snippet)
         {
             if (!_coreReady || _webView == null) return;                                                                         // _coreReady - флаг инициализации WebView2    
