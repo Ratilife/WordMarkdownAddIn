@@ -250,6 +250,7 @@
     <Compile Include="Services\DocumentSyncService.cs" />
     <Compile Include="Services\IWordElement.cs" />
     <Compile Include="Services\MarkdownRenderService.cs" />
+    <Compile Include="Services\MarkdownToWordFormatter.cs" />
     <Compile Include="Services\WordToMarkdownService.cs" />
     <Compile Include="ThisAddIn.cs">
       <SubType>Code</SubType>
