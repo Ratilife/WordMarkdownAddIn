@@ -25,16 +25,195 @@ namespace WordMarkdownAddIn.Services
             if (_activeDoc == null)
                 throw new System.Exception("Нет активного документа Word.");
         }
+
+        public string ExtractDocumentContent()
+        {
+            return _activeDoc.Content.Text;
+        }
+
+        /// <summary>
+        /// Извлекает структуру документа Word и преобразует её в список элементов IWordElement.
+        /// Элементы извлекаются в порядке их появления в документе.
+        /// </summary>
+        /// <returns>Список элементов документа в порядке их появления.</returns>
         public List<IWordElement> ExtractDocumentStructure()
         {
             var elements = new List<IWordElement>();
 
+            // Извлекаем параграфы (они уже идут в порядке документа)
             elements = ExtractParagraphs(elements);
+            
+            // Извлекаем таблицы (они также идут в порядке документа)
             elements = ExtractTables(elements);
+            
+            // Сортируем элементы по их позиции в документе для правильного порядка
+            // Создаем список с информацией о позиции
+            var elementsWithPosition = new List<(IWordElement element, int position)>();
+            
+            foreach (var element in elements)
+            {
+                int position = GetElementStartPosition(element);
+                elementsWithPosition.Add((element, position));
+            }
+            
+            // Сортируем по позиции и возвращаем только элементы
+            return elementsWithPosition
+                .OrderBy(x => x.position)
+                .Select(x => x.element)
+                .ToList();
+        }
 
+        /// <summary>
+        /// Получает начальную позицию элемента в документе для сортировки.
+        /// Использует индекс элементов в коллекциях Word для определения позиции.
+        /// </summary>
+        private int GetElementStartPosition(IWordElement element)
+        {
+            try
+            {
+                if (element is WordTable wordTable)
+                {
+                    // Для таблиц используем индекс в коллекции таблиц
+                    int tableIndex = 0;
+                    foreach (Table table in _activeDoc.Tables)
+                    {
+                        // Сопоставляем таблицу по содержимому первой ячейки
+                        // (упрощенная логика - можно улучшить для более точного сопоставления)
+                        if (table.Rows.Count > 0 && table.Columns.Count > 0)
+                        {
+                            string firstCellText = table.Cell(1, 1).Range.Text.TrimEnd('\r', '\a');
+                            if (wordTable.Rows.Count > 0 && wordTable.Rows[0].Count > 0)
+                            {
+                                string wordTableFirstCell = wordTable.Rows[0][0]?.ToMarkdown() ?? "";
+                                if (firstCellText.Contains(wordTableFirstCell) || 
+                                    wordTableFirstCell.Contains(firstCellText) ||
+                                    tableIndex < _activeDoc.Tables.Count)
+                                {
+                                    return table.Range.Start;
+                                }
+                            }
+                        }
+                        tableIndex++;
+                    }
+                }
+                else
+                {
+                    // Для параграфов и других элементов используем индекс в коллекции параграфов
+                    int paraIndex = 0;
+                    foreach (Paragraph para in _activeDoc.Paragraphs)
+                    {
+                        string text = para.Range.Text.TrimEnd('\r', '\a');
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            // Упрощенная проверка - используем индекс
+                            // В реальности можно улучшить сопоставление по содержимому
+                            return para.Range.Start;
+                        }
+                        paraIndex++;
+                    }
+                }
+            }
+            catch
+            {
+                // В случае ошибки возвращаем большое значение
+            }
+            
+            return int.MaxValue; // Если не удалось определить позицию
+        }
 
-            return elements;
+        /// <summary>
+        /// Преобразует структуру документа Word в строку Markdown.
+        /// Извлекает все элементы документа, вызывает для каждого метод ToMarkdown()
+        /// и объединяет результаты в одну строку Markdown.
+        /// Результат готов для отображения в поле Markdown настройки.
+        /// </summary>
+        /// <returns>Строка с Markdown-представлением документа.</returns>
+        public string ConvertToMarkdown()
+        {
+            try
+            {
+                // Извлекаем структуру документа
+                var elements = ExtractDocumentStructure();
+                
+                if (elements == null || elements.Count == 0)
+                    return "";
 
+                var sb = new StringBuilder();
+                
+                // Проходим по всем элементам и преобразуем их в Markdown
+                for (int i = 0; i < elements.Count; i++)
+                {
+                    var element = elements[i];
+                    if (element == null)
+                        continue;
+
+                    string markdown = element.ToMarkdown();
+                    
+                    if (!string.IsNullOrEmpty(markdown))
+                    {
+                        sb.Append(markdown);
+                        
+                        // Добавляем переносы строк в зависимости от типа элемента
+                        bool isLastElement = (i == elements.Count - 1);
+                        
+                        if (!isLastElement)
+                        {
+                            if (element is WordTable)
+                            {
+                                // Таблицы уже содержат переносы строк, добавляем одну пустую строку
+                                sb.AppendLine();
+                                sb.AppendLine();
+                            }
+                            else if (element is WordQuote)
+                            {
+                                // Цитаты уже содержат переносы строк, добавляем одну пустую строку
+                                sb.AppendLine();
+                                sb.AppendLine();
+                            }
+                            else if (element is WordParagraph para)
+                            {
+                                if (para.HeadingLevel > 0)
+                                {
+                                    // Заголовки - добавляем пустую строку после
+                                    sb.AppendLine();
+                                    sb.AppendLine();
+                                }
+                                else
+                                {
+                                    // Обычные параграфы - добавляем две пустые строки для разделения
+                                    sb.AppendLine();
+                                    sb.AppendLine();
+                                }
+                            }
+                            else if (element is WordTitle || element is WordSubtitle)
+                            {
+                                // Заголовки и подзаголовки - добавляем пустую строку после
+                                sb.AppendLine();
+                                sb.AppendLine();
+                            }
+                            else if (element is WordListItem)
+                            {
+                                // Элементы списка - добавляем одну пустую строку
+                                sb.AppendLine();
+                            }
+                            else
+                            {
+                                // Другие элементы - добавляем две пустые строки
+                                sb.AppendLine();
+                                sb.AppendLine();
+                            }
+                        }
+                    }
+                }
+
+                return sb.ToString().TrimEnd();
+            }
+            catch (Exception ex)
+            {
+                // В случае ошибки возвращаем пустую строку или можно логировать ошибку
+                System.Diagnostics.Debug.WriteLine($"Ошибка при преобразовании в Markdown: {ex.Message}");
+                return "";
+            }
         }
         
         // Вспомогательный метод для извлечения форматирования
