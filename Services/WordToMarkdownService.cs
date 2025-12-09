@@ -128,12 +128,11 @@ namespace WordMarkdownAddIn.Services
                     var rowData = new List<WordFormattedText>();
                     for (int j = 1; j <= table.Columns.Count; j++)
                     {
-                        string cellText = table.Cell(i, j).Range.Text.TrimEnd('\r', '\a'); // Обрезаем специальные символы Word
+                        Range cellRange = table.Cell(i, j).Range;
+                        string cellText = cellRange.Text.TrimEnd('\r', '\a'); // Обрезаем специальные символы Word
                         // Создаём экземпляр WordFormattedText из строки
-                        var formattedCellText = new WordFormattedText(); 
-
-                        //formattedCellText = cellText;
-                        //rowData.Add(formattedCellText);
+                        var formattedCellText = ExtractFormattedContent(cellRange);
+                        rowData.Add(formattedCellText);
                     }
                     tableData.Add(rowData);
                 }
