@@ -221,5 +221,20 @@ namespace WordMarkdownAddIn
                 MessageBox.Show($"Ошибка: {ex.Message}");
             }
         }
+
+        private void btnConvert_Click(object sender, RibbonControlEventArgs e)
+        {
+            try
+            {
+                var service = new Services.WordToMarkdownService();
+                string markdown = service.ConvertToMarkdown();
+                ThisAddIn.PaneControl.SetMarkdown(markdown);
+                MessageBox.Show("Документ Word успешно преобразован в Markdown!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при преобразовании: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 }

@@ -58,10 +58,13 @@
             this.bCodeBlock = this.Factory.CreateRibbonButton();
             this.bMermaid = this.Factory.CreateRibbonButton();
             this.bMath = this.Factory.CreateRibbonButton();
+            this.grpConvert = this.Factory.CreateRibbonGroup();
+            this.btnConvert = this.Factory.CreateRibbonButton();
             this.tabMarkdown.SuspendLayout();
             this.grpFile.SuspendLayout();
             this.grpFormat.SuspendLayout();
             this.grpInsert.SuspendLayout();
+            this.grpConvert.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabMarkdown
@@ -70,6 +73,7 @@
             this.tabMarkdown.Groups.Add(this.grpFile);
             this.tabMarkdown.Groups.Add(this.grpFormat);
             this.tabMarkdown.Groups.Add(this.grpInsert);
+            this.tabMarkdown.Groups.Add(this.grpConvert);
             this.tabMarkdown.Label = "Markdown";
             this.tabMarkdown.Name = "tabMarkdown";
             // 
@@ -225,6 +229,18 @@
             this.bMath.Name = "bMath";
             this.bMath.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bMath_Click);
             // 
+            // grpConvert
+            // 
+            this.grpConvert.Items.Add(this.btnConvert);
+            this.grpConvert.Label = "Преобразование";
+            this.grpConvert.Name = "grpConvert";
+            // 
+            // btnConvert
+            // 
+            this.btnConvert.Label = "Word → Markdown";
+            this.btnConvert.Name = "btnConvert";
+            this.btnConvert.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnConvert_Click);
+            // 
             // MarkdownRibbon
             // 
             this.Name = "MarkdownRibbon";
@@ -239,6 +255,8 @@
             this.grpFormat.PerformLayout();
             this.grpInsert.ResumeLayout(false);
             this.grpInsert.PerformLayout();
+            this.grpConvert.ResumeLayout(false);
+            this.grpConvert.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -269,6 +287,8 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bCodeBlock;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bMermaid;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bMath;
+        internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpConvert;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvert;
     }
 
     partial class ThisRibbonCollection
