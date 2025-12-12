@@ -2,6 +2,7 @@
 using Markdig.Parsers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using Markdig.Extensions.Tables;
 using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
@@ -23,6 +24,7 @@ namespace WordMarkdownAddIn.Services
             _activeDoc = _wordApp.ActiveDocument;
             _pipeline = new MarkdownPipelineBuilder()
                 .UseAdvancedExtensions()
+                .UsePipeTables()
                 .Build();
         }
 
@@ -274,12 +276,305 @@ namespace WordMarkdownAddIn.Services
             }
         }
 
-        private void ProcessBlock(Block block)
+        //Блок кода
+        private void ProcessCodeBlock(CodeBlock codeBlock)
         {
-            //Обработать каждый тип блока
-            if (block is HeadingBlock heading) 
+            if (codeBlock == null || _activeDoc == null)
+                return;
+
+            try
             {
                 
+                // Получаем текст кода из блока
+                var sb = new StringBuilder();
+           
+                string codeText = sb.ToString().TrimEnd('\r', '\n');
+                
+                if (string.IsNullOrEmpty(codeText))
+                    return;
+
+                // Создаем параграф для блока кода
+                var codeParagraph = _activeDoc.Content.Paragraphs.Add();
+                
+                // Устанавливаем моноширинный шрифт
+                codeParagraph.Range.Font.Name = "Courier New";   // Возможно изменить
+                codeParagraph.Range.Font.Size = 10;
+                
+                // Вставляем текст кода
+                codeParagraph.Range.Text = codeText;
+                
+                // Применяем стиль для кода (если есть) или оставляем обычный
+                // Можно использовать встроенный стиль "Code" если он существует
+                try
+                {
+                    codeParagraph.Range.set_Style("Code");
+                }
+                catch
+                {
+                    // Если стиль "Code" не существует, используем обычный стиль
+                    codeParagraph.Range.set_Style("Normal");
+                }
+                
+                // Добавляем перенос строки после блока кода
+                codeParagraph.Range.InsertParagraphAfter();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка обработки блока кода: {ex.Message}");
+            }
+        }
+
+        //Цитата
+        private void ProcessQuote(QuoteBlock quoteBlock)
+        {
+            if (quoteBlock == null || _activeDoc == null)
+                return;
+
+            try
+            {
+                // Обрабатываем все параграфы внутри цитаты
+                foreach (var block in quoteBlock)
+                {
+                    if (block is ParagraphBlock paragraph)
+                    {
+                        // Создаем параграф для цитаты
+                        var quoteParagraph = _activeDoc.Content.Paragraphs.Add();
+                        
+                        // Извлекаем текст из параграфа цитаты
+                        string quoteText = GetTextFormInline(paragraph.Inline);
+
+                        string userStyle = GetCurrentParagraphStyle();
+
+                        if (!string.IsNullOrEmpty(quoteText))
+                        {
+                            quoteParagraph.Range.Text = quoteText;
+                        }
+                        
+                        // Применяем стиль цитаты
+                        try
+                        {
+                            quoteParagraph.Range.set_Style("Courier New");  // Проверить 
+                        }
+                        catch
+                        {
+                            // Если стиль "Quote" не существует, используем обычный стиль
+                            quoteParagraph.Range.set_Style(userStyle);   
+                            // Добавляем отступ для визуального выделения
+                            quoteParagraph.Range.ParagraphFormat.LeftIndent = 36; // 0.5 дюйма
+                        }
+                        
+                        quoteParagraph.Range.InsertParagraphAfter();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка обработки цитаты: {ex.Message}");
+            }
+        }
+
+        //Таблица - версия с dynamic для совместимости с разными версиями Markdig
+        private void ProcessTableDynamic(dynamic tableBlock)
+        {
+            if (tableBlock == null || _activeDoc == null)
+                return;
+
+            try
+            {
+                // Получаем количество строк и столбцов через dynamic
+                int rowCount = tableBlock.Count;
+                if (rowCount == 0)
+                    return;
+
+                // Определяем количество столбцов из первой строки
+                int columnCount = 0;
+                dynamic firstRow = tableBlock[0];
+                if (firstRow != null)
+                {
+                    columnCount = firstRow.Count;
+                }
+
+                if (columnCount == 0)
+                    return;
+
+                // Создаем таблицу в Word
+                var range = _activeDoc.Content;
+                range.Collapse(WdCollapseDirection.wdCollapseEnd);
+                
+                var wordTable = _activeDoc.Tables.Add(
+                    range,
+                    rowCount,
+                    columnCount,
+                    WdDefaultTableBehavior.wdWord9TableBehavior,
+                    WdAutoFitBehavior.wdAutoFitFixed);
+
+                // Обрабатываем каждую строку таблицы
+                for (int rowIndex = 0; rowIndex < rowCount && rowIndex < tableBlock.Count; rowIndex++)
+                {
+                    dynamic markdownRow = tableBlock[rowIndex];
+                    if (markdownRow == null)
+                        continue;
+
+                    // Обрабатываем каждую ячейку в строке
+                    int rowColumnCount = markdownRow.Count;
+                    for (int colIndex = 0; colIndex < columnCount && colIndex < rowColumnCount; colIndex++)
+                    {
+                        dynamic cell = markdownRow[colIndex];
+                        if (cell == null)
+                            continue;
+
+                        // Получаем текст ячейки
+                        string cellText = string.Empty;
+                        int cellCount = cell.Count;
+                        if (cellCount > 0)
+                        {
+                            dynamic firstCellBlock = cell[0];
+                            if (firstCellBlock != null)
+                            {
+                                // Пробуем получить текст через Inline, если это ParagraphBlock
+                                try
+                                {
+                                    if (firstCellBlock is ParagraphBlock cellParagraph)
+                                    {
+                                        cellText = GetTextFormInline(cellParagraph.Inline);
+                                    }
+                                    else if (firstCellBlock.Inline != null)
+                                    {
+                                        // Альтернативный способ получения текста
+                                        cellText = GetTextFormInline(firstCellBlock.Inline);
+                                    }
+                                }
+                                catch
+                                {
+                                    // Если не удалось получить текст, оставляем пустым
+                                }
+                            }
+                        }
+
+                        // Вставляем текст в ячейку Word (индексация с 1)
+                        var wordCell = wordTable.Cell(rowIndex + 1, colIndex + 1);
+                        wordCell.Range.Text = cellText;
+                        
+                        // Убираем символ конца параграфа из ячейки
+                        wordCell.Range.Text = wordCell.Range.Text.TrimEnd('\r', '\a');
+                    }
+                }
+
+                // Форматируем таблицу
+                wordTable.AutoFormat(
+                    WdTableFormat.wdTableFormatGrid1,
+                    true,  // Автоподбор размеров
+                    false, // Не применять границы
+                    false, // Не применять заливку
+                    false, // Не применять шрифт
+                    false, // Не применять цвет
+                    false, // Не применять автоформат
+                    false); // Не применять выравнивание
+
+                // Добавляем перенос строки после таблицы
+                range.InsertParagraphAfter();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка обработки таблицы: {ex.Message}");
+            }
+        }
+
+        //Список
+        private void ProcessList(ListBlock listBlock)
+        {
+            if (listBlock == null || _activeDoc == null)
+                return;
+
+            try
+            {
+                // Определяем тип списка (нумерованный или маркированный)
+                bool isOrdered = listBlock.IsOrdered;
+
+                // Обрабатываем каждый элемент списка
+                foreach (var item in listBlock)
+                {
+                    if (item is ListItemBlock listItem)
+                    {
+                        // Обрабатываем параграфы внутри элемента списка
+                        foreach (var block in listItem)
+                        {
+                            if (block is ParagraphBlock paragraph)
+                            {
+                                // Создаем параграф для элемента списка
+                                var listParagraph = _activeDoc.Content.Paragraphs.Add();
+                                
+                                // Извлекаем текст элемента списка
+                                string itemText = GetTextFormInline(paragraph.Inline);
+                                
+                                if (!string.IsNullOrEmpty(itemText))
+                                {
+                                    listParagraph.Range.Text = itemText;
+                                }
+
+                                // Применяем форматирование списка
+                                if (isOrdered)
+                                {
+                                    // Нумерованный список
+                                    listParagraph.Range.ListFormat.ApplyNumberDefault();
+                                }
+                                else
+                                {
+                                    // Маркированный список
+                                    listParagraph.Range.ListFormat.ApplyBulletDefault();
+                                }
+
+                                listParagraph.Range.InsertParagraphAfter();
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка обработки списка: {ex.Message}");
+            }
+        }
+
+        private void ProcessBlock(Block block)
+        {
+            if (block == null)
+                return;
+
+            try
+            {
+                //Обработать каждый тип блока
+                if (block is HeadingBlock heading)
+                {
+                    ProcessHeading(heading);
+                }
+                else if (block is ParagraphBlock paragraph)
+                {
+                    ProcessParagraph(paragraph);
+                }
+                else if (block is CodeBlock codeBlock)
+                {
+                    ProcessCodeBlock(codeBlock);
+                }
+                else if (block is QuoteBlock quoteBlock)
+                {
+                    ProcessQuote(quoteBlock);
+                }
+                else if (block.GetType().Name.Contains("Table") && 
+                         (block.GetType().Namespace == "Markdig.Extensions.Tables" || 
+                          block.GetType().Namespace?.Contains("Markdig.Extensions") == true))
+                {
+                    // Используем dynamic для обхода проблемы с типами в разных версиях Markdig
+                    ProcessTableDynamic(block);
+                }
+                else if (block is ListBlock listBlock)
+                {
+                    ProcessList(listBlock);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка обработки блока {block.GetType().Name}: {ex.Message}");
             }
         }
 
