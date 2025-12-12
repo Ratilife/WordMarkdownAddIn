@@ -249,6 +249,7 @@
             // 
             this.btnConvertMD_Doc.Label = "Markdown → Word";
             this.btnConvertMD_Doc.Name = "btnConvertMD_Doc";
+            this.btnConvertMD_Doc.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnApplyToWord_Click);
             // 
             // btnConvertMD_DocNotF
             // 
