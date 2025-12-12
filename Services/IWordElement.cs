@@ -590,4 +590,159 @@ namespace WordMarkdownAddIn.Services
         }
     }
 
+    /// <summary>
+    /// Класс для представления блока кода в Word документе.
+    /// Реализует интерфейс IWordElement для преобразования между Markdown и Word форматами.
+    /// </summary>
+    public class WordCodeBlock : IWordElement
+    {
+        /// <summary>
+        /// Возвращает тип элемента - "CodeBlock"
+        /// </summary>
+        public string ElementType => "CodeBlock";
+
+        /// <summary>
+        /// Текст кода, содержащийся в блоке
+        /// </summary>
+        public string Code { get; set; } = "";
+
+        /// <summary>
+        /// Язык программирования (опционально). Например: "csharp", "python", "javascript"
+        /// Используется для подсветки синтаксиса в Markdown
+        /// </summary>
+        public string Language { get; set; } = "";
+
+        /// <summary>
+        /// Конструктор по умолчанию - создает пустой блок кода
+        /// </summary>
+        public WordCodeBlock()
+        {
+        }
+
+        /// <summary>
+        /// Конструктор с кодом
+        /// </summary>
+        /// <param name="code">Текст кода для блока</param>
+        public WordCodeBlock(string code)
+        {
+            Code = code ?? ""; // Защита от null
+        }
+
+        /// <summary>
+        /// Конструктор с кодом и языком программирования
+        /// </summary>
+        /// <param name="code">Текст кода для блока</param>
+        /// <param name="language">Язык программирования (например, "csharp", "python")</param>
+        public WordCodeBlock(string code, string language)
+        {
+            Code = code ?? "";
+            Language = language ?? "";
+        }
+
+        /// <summary>
+        /// Преобразует блок кода в строку Markdown.
+        /// Формат: ```language\ncode\n```
+        /// </summary>
+        /// <returns>Строка Markdown, представляющая блок кода</returns>
+        public string ToMarkdown()
+        {
+            // Если код пустой, возвращаем пустую строку
+            if (string.IsNullOrEmpty(Code))
+                return "";
+
+            var sb = new StringBuilder();
+
+            // Открывающие тройные кавычки
+            sb.Append("```");
+
+            // Добавляем язык, если он указан
+            if (!string.IsNullOrEmpty(Language))
+            {
+                sb.Append(Language);
+            }
+
+            // Перенос строки после открывающих кавычек
+            sb.AppendLine();
+
+            // Добавляем сам код
+            sb.Append(Code);
+
+            // Закрывающие тройные кавычки на новой строке
+            sb.AppendLine();
+            sb.Append("```");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Применяет блок кода к Word документу.
+        /// Создает параграф с моноширинным шрифтом и специальным форматированием.
+        /// </summary>
+        /// <param name="doc">Word документ, в который нужно вставить блок кода</param>
+        public void ApplyToWord(Document doc)
+        {
+            // Проверка на null - защита от ошибок
+            if (doc == null)
+                return;
+
+            // Если код пустой, ничего не делаем
+            if (string.IsNullOrEmpty(Code))
+                return;
+
+            try
+            {
+                // 1. Создаем новый параграф для блока кода
+                var codeParagraph = doc.Content.Paragraphs.Add();
+
+                // 2. Устанавливаем моноширинный шрифт (стандарт для кода)
+                // Courier New - классический моноширинный шрифт
+                codeParagraph.Range.Font.Name = "Courier New";
+                
+                // Устанавливаем размер шрифта (обычно код отображается чуть меньше)
+                codeParagraph.Range.Font.Size = 10;
+
+                // 3. Вставляем текст кода
+                codeParagraph.Range.Text = Code;
+
+                // 4. Применяем стиль "Code", если он существует в Word
+                // Стиль "Code" обычно имеет:
+                // - Моноширинный шрифт
+                // - Серый фон
+                // - Отступы
+                try
+                {
+                    codeParagraph.Range.set_Style("Code");
+                }
+                catch
+                {
+                    // Если стиль "Code" не существует, используем "Normal"
+                    // и применяем форматирование вручную
+                    codeParagraph.Range.set_Style("Normal");
+                    
+                    // Добавляем визуальное выделение через заливку
+                    codeParagraph.Range.Shading.BackgroundPatternColor = 
+                        Microsoft.Office.Interop.Word.WdColor.wdColorGray25; // Светло-серый фон
+                    
+                    // Добавляем отступы для визуального выделения
+                    codeParagraph.Range.ParagraphFormat.LeftIndent = 18; // 0.25 дюйма
+                    codeParagraph.Range.ParagraphFormat.RightIndent = 18;
+                    
+                    // Добавляем отступ сверху и снизу
+                    codeParagraph.Range.ParagraphFormat.SpaceBefore = 6;
+                    codeParagraph.Range.ParagraphFormat.SpaceAfter = 6;
+                }
+
+                // 5. Добавляем перенос строки после блока кода
+                // Это создает визуальное разделение между кодом и следующим элементом
+                codeParagraph.Range.InsertParagraphAfter();
+            }
+            catch (Exception ex)
+            {
+                // Обработка ошибок - выводим в отладочную консоль
+                // В реальном приложении можно использовать логирование
+                System.Diagnostics.Debug.WriteLine($"Ошибка при вставке блока кода: {ex.Message}");
+            }
+        }
+    }
+
 }

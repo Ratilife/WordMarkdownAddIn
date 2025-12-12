@@ -407,6 +407,10 @@ namespace WordMarkdownAddIn.Services
         {
 
         }
+        //7.Блоки Кода 
+        private void ExtractCodeBlock()
+        {
 
+        }
     }
 }
