@@ -1,8 +1,9 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Remoting.Contexts;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
@@ -13,6 +14,7 @@ namespace WordMarkdownAddIn.Services
     {
         string ElementType { get; }
         string ToMarkdown(); // Метод для преобразования элемента в строку Markdown
+        void ApplyToWord(Document doc); // Word ← Markdown
     }
 
     public interface IListItemElement : IWordElement { }
@@ -62,10 +64,10 @@ namespace WordMarkdownAddIn.Services
                 // Затем применяем Markdown форматирование
                 if (run.IsStrikethrough)
                     markdown = $"~~{markdown}~~";
-                
+
                 if (run.IsBold)
                     markdown = $"**{markdown}**";
-                
+
                 if (run.IsItalic)
                     markdown = $"*{markdown}*";
 
@@ -78,6 +80,61 @@ namespace WordMarkdownAddIn.Services
             }
 
             return sb.ToString();
+        }
+        public void ApplyToWord(Document doc, Range range)
+        {
+            // НЕ создаем новый параграф, работаем с переданным Range
+            foreach (var run in Runs)
+            {
+                if (run == null || string.IsNullOrEmpty(run.Text))
+                    continue;
+
+                // Сохраняем текущее форматирование
+                var originalBold = range.Font.Bold;
+                var originalItalic = range.Font.Italic;
+                var originalStrikethrough = range.Font.StrikeThrough;
+                var originalUnderline = range.Font.Underline;
+                var originalFontName = range.Font.Name;
+                var originalSize = range.Font.Size;
+
+                // Применяем форматирование из FormattedRun
+                range.Font.Bold = run.IsBold ? 1 : 0;
+                range.Font.Italic = run.IsItalic ? 1 : 0;
+                range.Font.StrikeThrough = run.IsStrikethrough ? 1 : 0;
+                range.Font.Underline = run.IsUnderline ? WdUnderline.wdUnderlineSingle : WdUnderline.wdUnderlineNone;
+
+                if (run.IsSuperscript)
+                    range.Font.Superscript = 1;
+                else if (run.IsSubscript)
+                    range.Font.Subscript = 1;
+
+                if (run.SmallCaps)
+                    range.Font.SmallCaps = 1;
+                if (run.AllCaps)
+                    range.Font.AllCaps = 1;
+
+                // Вставляем текст
+                range.InsertAfter(run.Text);
+                range.Collapse(WdCollapseDirection.wdCollapseEnd);
+
+                // Восстанавливаем форматирование (опционально, зависит от логики)
+            }
+        }
+
+        // Реализация интерфейса IWordElement - создает новый параграф
+        public void ApplyToWord(Document doc)
+        {
+            if (doc == null)
+                return;
+
+            // Создаем новый параграф
+            var paragraph = doc.Content.Paragraphs.Add();
+            
+            // Применяем форматированный текст к параграфу через перегрузку с Range
+            ApplyToWord(doc, paragraph.Range);
+            
+            // Добавляем перенос строки
+            paragraph.Range.InsertParagraphAfter();
         }
     }
 
@@ -96,7 +153,7 @@ namespace WordMarkdownAddIn.Services
                 return "";
 
             var sb = new StringBuilder();
-            
+
             // Обрабатываем первую строку как заголовок таблицы
             if (Rows.Count > 0)
             {
@@ -142,6 +199,62 @@ namespace WordMarkdownAddIn.Services
 
             return sb.ToString().TrimEnd();
         }
+
+        public void ApplyToWord(Document doc)
+        {
+            if (doc == null || Rows == null || Rows.Count == 0)
+                return;
+
+            // 1. Определяем размеры таблицы
+            int rowCount = Rows.Count;
+            int columnCount = Rows[0]?.Count ?? 0;
+
+            if (columnCount == 0)
+                return;
+
+            // 2. Получаем позицию для вставки (в конец документа)
+            var range = doc.Content;
+            range.Collapse(WdCollapseDirection.wdCollapseEnd);
+
+            // 3. Создаем таблицу
+            var wordTable = doc.Tables.Add(
+                range,
+                rowCount,
+                columnCount,
+                WdDefaultTableBehavior.wdWord9TableBehavior,
+                WdAutoFitBehavior.wdAutoFitFixed);
+
+            // 4. Заполняем ячейки
+            for (int rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            {
+                var row = Rows[rowIndex];
+                if (row == null)
+                    continue;
+
+                for (int colIndex = 0; colIndex < columnCount && colIndex < row.Count; colIndex++)
+                {
+                    var cell = wordTable.Cell(rowIndex + 1, colIndex + 1); // Word индексация с 1
+                    var cellContent = row[colIndex];
+
+                    if (cellContent != null)
+                    {
+                        // Применяем форматированный текст к ячейке
+                        cellContent.ApplyToWord(doc, cell.Range);
+                    }
+
+                    // Убираем символ конца параграфа из ячейки
+                    cell.Range.Text = cell.Range.Text.TrimEnd('\r', '\a');
+                }
+            }
+
+            // 5. Форматируем таблицу (опционально)
+            wordTable.AutoFormat(
+                WdTableFormat.wdTableFormatGrid1,
+                true, false, false, false, false, false, false);
+
+            // 6. Добавляем перенос строки после таблицы
+            range.InsertParagraphAfter();
+        }
     }
 
     public class WordListItem : IWordElement
@@ -150,13 +263,13 @@ namespace WordMarkdownAddIn.Services
         public List<WordFormattedText> Contents { get; set; } // Неправильно для одного элемента списка
         public bool IsOrdered { get; set; }
 
-        public WordListItem(List<WordFormattedText> contents, bool isOrdered) 
+        public WordListItem(List<WordFormattedText> contents, bool isOrdered)
         {
             Contents = contents;
             IsOrdered = isOrdered;
         }
 
-        public string ToMarkdown() 
+        public string ToMarkdown()
         {
             if (Contents == null || Contents.Count == 0)
                 return "";
@@ -175,6 +288,39 @@ namespace WordMarkdownAddIn.Services
             }
 
             return sb.ToString();
+        }
+        public void ApplyToWord(Document doc)
+        {
+            if (doc == null || Contents == null || Contents.Count == 0)
+                return;
+
+            // Обрабатываем каждый параграф внутри элемента списка
+            foreach (var content in Contents)
+            {
+                if (content == null)
+                    continue;
+
+                // 1. Создаем параграф для элемента списка
+                var listParagraph = doc.Content.Paragraphs.Add();
+
+                // 2. Применяем форматированный текст
+                content.ApplyToWord(doc, listParagraph.Range);
+
+                // 3. Применяем форматирование списка
+                if (IsOrdered)
+                {
+                    // Нумерованный список
+                    listParagraph.Range.ListFormat.ApplyNumberDefault();
+                }
+                else
+                {
+                    // Маркированный список
+                    listParagraph.Range.ListFormat.ApplyBulletDefault();
+                }
+
+                // 4. Добавляем перенос строки
+                listParagraph.Range.InsertParagraphAfter();
+            }
         }
     }
 
@@ -211,7 +357,7 @@ namespace WordMarkdownAddIn.Services
                 return "";
 
             string contentMarkdown = Content.ToMarkdown();
-            
+
             int headingLevel = HeadingLevel;
             if (headingLevel > 0)
             {
@@ -224,7 +370,44 @@ namespace WordMarkdownAddIn.Services
                 // Обычный параграф
                 return contentMarkdown;
             }
+
         }
+    
+        public void ApplyToWord(Document doc)
+        {
+            if (doc == null)
+                return;
+
+            // 1. Создаем новый параграф
+            var paragraph = doc.Content.Paragraphs.Add();
+
+            // 2. Применяем стиль (Heading 1, Normal и т.д.)
+            try
+            {
+                paragraph.Range.set_Style(StyleName);
+            }
+            catch
+            {
+                // Если стиль не существует, используем Normal
+                paragraph.Range.set_Style("Normal");
+            }
+
+            // 3. Применяем форматированный текст через Content
+            if (Content != null && Content.Runs.Count > 0)
+            {
+                // Нужен метод ApplyToWord для WordFormattedText с Range
+                Content.ApplyToWord(doc, paragraph.Range);
+            }
+            else
+            {
+                // Если нет форматирования, просто вставляем текст
+                paragraph.Range.Text = Content?.ToMarkdown() ?? "";
+            }
+
+            // 4. Добавляем перенос строки после параграфа
+            paragraph.Range.InsertParagraphAfter();
+        }
+
     }
 
     public class WordQuote : IWordElement
@@ -266,6 +449,42 @@ namespace WordMarkdownAddIn.Services
 
             return sb.ToString().TrimEnd();
         }
+        public void ApplyToWord(Document doc)
+        {
+            if (doc == null)
+                return;
+
+            // 1. Создаем параграф для цитаты
+            var quoteParagraph = doc.Content.Paragraphs.Add();
+
+            // 2. Получаем текст цитаты
+            //string quoteText = "";
+            if (Content != null)
+            {
+                // Применяем форматированный текст
+                Content.ApplyToWord(doc, quoteParagraph.Range);
+            }
+            else if (!string.IsNullOrEmpty(Text))
+            {
+                quoteParagraph.Range.Text = Text;
+            }
+
+            // 3. Применяем стиль цитаты (если есть)
+            try
+            {
+                quoteParagraph.Range.set_Style("Quote");
+            }
+            catch
+            {
+                // Если стиль "Quote" не существует, используем обычный стиль
+                quoteParagraph.Range.set_Style("Normal");
+                // Добавляем отступ для визуального выделения
+                quoteParagraph.Range.ParagraphFormat.LeftIndent = 36; // 0.5 дюйма
+            }
+
+            // 4. Добавляем перенос строки
+            quoteParagraph.Range.InsertParagraphAfter();
+        }
 
     }
 
@@ -299,7 +518,10 @@ namespace WordMarkdownAddIn.Services
             // Подзаголовок обычно представляется как заголовок уровня 2
             return $"## {subtitleText}";
         }
+        public void ApplyToWord(Document doc)
+        {
 
+        }
     }
 
     public class WordTitle : IWordElement
@@ -334,6 +556,38 @@ namespace WordMarkdownAddIn.Services
             return $"# {titleText}";
         }
 
+        public void ApplyToWord(Document doc)
+        {
+            if (doc == null)
+                return;
+
+            // 1. Создаем параграф
+            var paragraph = doc.Content.Paragraphs.Add();
+
+            // 2. Получаем текст заголовка
+            //string titleText = "";
+            if (Content != null)
+            {
+                Content.ApplyToWord(doc, paragraph.Range);
+            }
+            else if (!string.IsNullOrEmpty(Text))
+            {
+                paragraph.Range.Text = Text;
+            }
+
+            // 3. Применяем стиль заголовка уровня 1
+            try
+            {
+                paragraph.Range.set_Style("Heading 1");
+            }
+            catch
+            {
+                paragraph.Range.set_Style("Normal");
+            }
+
+            // 4. Добавляем перенос строки
+            paragraph.Range.InsertParagraphAfter();
+        }
     }
 
 }
