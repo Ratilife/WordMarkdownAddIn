@@ -80,6 +80,86 @@ namespace WordMarkdownAddIn.Services
             return sb.ToString();
         }
 
+        private void ApplyInlineToWordRange(ContainerInline inline, Range wordRange)
+        {
+            if (inline == null || wordRange == null)
+                return;
+
+            var current = inline.FirstChild;
+            while (current != null)
+            {
+                if (current is LiteralInline literal)
+                {
+                    // Простой текст - вставляем как есть
+                    wordRange.InsertAfter(literal.Content.ToString());
+                    // Перемещаем курсор в конец вставленного текста
+                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
+                }
+                else if (current is EmphasisInline emphasis)
+                {
+                    // Жирный или курсив
+                    // Сохраняем текущее форматирование
+                    var originalBold = wordRange.Font.Bold;
+                    var originalItalic = wordRange.Font.Italic;
+
+                    // Определяем тип форматирования
+                    bool isBold = emphasis.DelimiterCount == 2;  // **текст** - жирный
+                    bool isItalic = emphasis.DelimiterCount == 1; // *текст* - курсив
+
+                    // Применяем форматирование
+                    if (isBold)
+                        wordRange.Font.Bold = 1;
+                    else if (isItalic)
+                        wordRange.Font.Italic = 1;
+
+                    // Рекурсивно обрабатываем содержимое emphasis
+                    ApplyInlineToWordRange(emphasis, wordRange);
+
+                    // Восстанавливаем форматирование
+                    wordRange.Font.Bold = originalBold;
+                    wordRange.Font.Italic = originalItalic;
+                }
+                else if (current is LinkInline link)
+                {
+                    // Ссылка
+                    string linkText = GetTextFormInline(link);
+                    if (string.IsNullOrEmpty(linkText))
+                        linkText = link.Url ?? string.Empty;
+
+                    // Вставляем текст ссылки
+                    wordRange.InsertAfter(linkText);
+                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
+
+                    // Создаем гиперссылку (опционально)
+                    if (!string.IsNullOrEmpty(link.Url))
+                    {
+                        // Можно создать гиперссылку через Hyperlinks.Add()
+                        // Но это сложнее, пока просто вставляем текст
+                    }
+                }
+                else if (current is CodeInline code)
+                {
+                    // Инлайн-код - обычно моноширинный шрифт
+                    var originalFont = wordRange.Font.Name;
+                    wordRange.Font.Name = "Courier New"; // или другой моноширинный
+
+                    wordRange.InsertAfter(code.Content.ToString());
+                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
+
+                    wordRange.Font.Name = originalFont;
+                }
+                else if (current is LineBreakInline)
+                {
+                    // Перенос строки
+                    wordRange.InsertAfter("\r");
+                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
+                }
+
+                // Переходим к следующему элементу
+                current = current.NextSibling;
+            }
+        }
+
         //Заголовок
         private void ProcessHeading(HeadingBlock heading)
         {
@@ -114,7 +194,42 @@ namespace WordMarkdownAddIn.Services
             }
         }
 
+        //Параграф
+        private void ProcessParagraph(ParagraphBlock paragraph)
+        {
+            if (paragraph == null || paragraph.Inline.FirstChild == null)
+            {
+                return;
+            }
 
+            try
+            {
+                //Проверяем есть ли содержание
+                if(paragraph.Inline == null || paragraph.Inline.NextSibling == null)
+                {
+                    //Пусстой параграф - создаем пустую строку
+                    var wordParagraph = _activeDoc.Content.Paragraphs.Add();
+                    wordParagraph.Range.set_Style("Normal");
+                    wordParagraph.Range.InsertParagraphAfter();
+                    return;
+                }
+                // Создаем параграф Word
+                var wordParagraph = _activeDoc.Content.Paragraphs.Add();
+                var range = wordParagraph.Range;
+                // Создаем стиль "Normal"
+                range.set_Style("Normal");
+
+                // Вставляем содержимое с форматированием
+                ApplyInlineToWordRange(paragraph.Inline, range);
+
+                //Добавляем перенос строки после параграфа
+                range.InsertParagraphAfter();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка обработки параграфа: {ex.Message}");
+            }
+        }
 
         private void ProcessBlock(Block block)
         {
