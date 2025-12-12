@@ -160,6 +160,30 @@ namespace WordMarkdownAddIn.Services
             }
         }
 
+        private string GetCurrentParagraphStyle()
+        {
+            try
+            {
+                // Получаем стиль из позиции курсора
+                if (_wordApp?.Selection?.Range != null)
+                {
+                    string styleName = _wordApp.Selection.Range.get_Style().NameLocal;
+                    // Проверяем, что это стиль параграфа, а не символов
+                    if (!string.IsNullOrEmpty(styleName) && !styleName.StartsWith("Стиль символов"))
+                    {
+                        return styleName;
+                    }
+                }
+            }
+            catch
+            {
+                // Игнорируем ошибки
+            }
+
+            // Возвращаем "Normal" по умолчанию
+            return "Normal";
+        }
+
         //Заголовок
         private void ProcessHeading(HeadingBlock heading)
         {
@@ -204,26 +228,45 @@ namespace WordMarkdownAddIn.Services
 
             try
             {
+                var wordParagraph = _activeDoc.Content.Paragraphs.Add();
                 //Проверяем есть ли содержание
-                if(paragraph.Inline == null || paragraph.Inline.NextSibling == null)
+                if (paragraph.Inline == null || paragraph.Inline.NextSibling == null)
                 {
                     //Пусстой параграф - создаем пустую строку
-                    var wordParagraph = _activeDoc.Content.Paragraphs.Add();
-                    wordParagraph.Range.set_Style("Normal");
+                    string userStyle = GetCurrentParagraphStyle();
+                    wordParagraph.Range.set_Style(userStyle);
                     wordParagraph.Range.InsertParagraphAfter();
                     return;
                 }
-                // Создаем параграф Word
-                var wordParagraph = _activeDoc.Content.Paragraphs.Add();
-                var range = wordParagraph.Range;
-                // Создаем стиль "Normal"
-                range.set_Style("Normal");
+               
+                // Извлекаем текст параграфа
+                string paragraphText = GetTextFormInline(paragraph.Inline);
 
-                // Вставляем содержимое с форматированием
-                ApplyInlineToWordRange(paragraph.Inline, range);
+                if (string.IsNullOrEmpty(paragraphText))
+                {
+                    // Пустой параграф
+                    var emptyPara = _activeDoc.Content.Paragraphs.Add();
+                    string userStyle = GetCurrentParagraphStyle();
+                    emptyPara.Range.set_Style(userStyle);
+                    emptyPara.Range.InsertParagraphAfter();
+                    return;
+                }
 
-                //Добавляем перенос строки после параграфа
-                range.InsertParagraphAfter();
+                // Создаем параграф в Word
+                var newParagraph = _activeDoc.Content.Paragraphs.Add();
+
+                // Вставляем текст
+                newParagraph.Range.Text = paragraphText;
+
+                // Получаем стиль, выбранный пользователем в позиции курсора
+                string currentStyle = GetCurrentParagraphStyle();
+
+                // Применяем стиль пользователя (или "Normal" по умолчанию)
+                newParagraph.Range.set_Style(currentStyle);
+
+                // Добавляем перенос строки после параграфа
+                newParagraph.Range.InsertParagraphAfter();
+
             }
             catch (Exception ex)
             {
