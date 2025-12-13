@@ -146,7 +146,29 @@ namespace WordMarkdownAddIn.Services
             return formattedText;
         }
 
+        private string GetCurrentParagraphStyle()
+        {
+            try
+            {
+                // Получаем стиль из позиции курсора
+                if (_wordApp?.Selection?.Range != null)
+                {
+                    string styleName = _wordApp.Selection.Range.get_Style().NameLocal;
+                    // Проверяем, что это стиль параграфа, а не символов
+                    if (!string.IsNullOrEmpty(styleName) && !styleName.StartsWith("Стиль символов"))
+                    {
+                        return styleName;
+                    }
+                }
+            }
+            catch
+            {
+                // Игнорируем ошибки
+            }
 
+            // Возвращаем "Normal" по умолчанию
+            return "Normal";
+        }
 
         //Заголовок
         private IWordElement ProcessHeading(HeadingBlock heading)
@@ -175,58 +197,26 @@ namespace WordMarkdownAddIn.Services
         }
 
         //Параграф
-        private void ProcessParagraph(ParagraphBlock paragraph)
+        private IWordElement ProcessParagraph(ParagraphBlock paragraph)
         {
             if (paragraph == null || paragraph.Inline.FirstChild == null)
             {
-                return;
+                return null;
             }
 
             try
             {
-                var wordParagraph = _activeDoc.Content.Paragraphs.Add();
-                //Проверяем есть ли содержание
-                if (paragraph.Inline == null || paragraph.Inline.NextSibling == null)
-                {
-                    //Пусстой параграф - создаем пустую строку
-                    string userStyle = GetCurrentParagraphStyle();
-                    wordParagraph.Range.set_Style(userStyle);
-                    wordParagraph.Range.InsertParagraphAfter();
-                    return;
-                }
-               
-                // Извлекаем текст параграфа
-                string paragraphText = GetTextFormInline(paragraph.Inline);
+                // 1. Преобразуем inline-элементы в WordFormattedText
+                var formattedText = ConvertInlineToWordFormattedText(paragraph.Inline);
 
-                if (string.IsNullOrEmpty(paragraphText))
-                {
-                    // Пустой параграф
-                    var emptyPara = _activeDoc.Content.Paragraphs.Add();
-                    string userStyle = GetCurrentParagraphStyle();
-                    emptyPara.Range.set_Style(userStyle);
-                    emptyPara.Range.InsertParagraphAfter();
-                    return;
-                }
-
-                // Создаем параграф в Word
-                var newParagraph = _activeDoc.Content.Paragraphs.Add();
-
-                // Вставляем текст
-                newParagraph.Range.Text = paragraphText;
-
-                // Получаем стиль, выбранный пользователем в позиции курсора
+                // 2. Получаем текущий стиль пользователя
                 string currentStyle = GetCurrentParagraphStyle();
-
-                // Применяем стиль пользователя (или "Normal" по умолчанию)
-                newParagraph.Range.set_Style(currentStyle);
-
-                // Добавляем перенос строки после параграфа
-                newParagraph.Range.InsertParagraphAfter();
-
+                return new WordParagraph(currentStyle, formattedText);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Ошибка обработки параграфа: {ex.Message}");
+                return null;
             }
         }
 
