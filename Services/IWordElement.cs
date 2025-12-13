@@ -129,10 +129,10 @@ namespace WordMarkdownAddIn.Services
 
             // Создаем новый параграф
             var paragraph = doc.Content.Paragraphs.Add();
-            
+
             // Применяем форматированный текст к параграфу через перегрузку с Range
             ApplyToWord(doc, paragraph.Range);
-            
+
             // Добавляем перенос строки
             paragraph.Range.InsertParagraphAfter();
         }
@@ -372,7 +372,7 @@ namespace WordMarkdownAddIn.Services
             }
 
         }
-    
+
         public void ApplyToWord(Document doc)
         {
             if (doc == null)
@@ -440,7 +440,7 @@ namespace WordMarkdownAddIn.Services
             // Разбиваем на строки и добавляем префикс > для каждой строки
             var lines = quoteText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             var sb = new StringBuilder();
-            
+
             foreach (var line in lines)
             {
                 sb.Append("> ");
@@ -697,7 +697,7 @@ namespace WordMarkdownAddIn.Services
                 // 2. Устанавливаем моноширинный шрифт (стандарт для кода)
                 // Courier New - классический моноширинный шрифт
                 codeParagraph.Range.Font.Name = "Courier New";
-                
+
                 // Устанавливаем размер шрифта (обычно код отображается чуть меньше)
                 codeParagraph.Range.Font.Size = 10;
 
@@ -718,15 +718,15 @@ namespace WordMarkdownAddIn.Services
                     // Если стиль "Code" не существует, используем "Normal"
                     // и применяем форматирование вручную
                     codeParagraph.Range.set_Style("Normal");
-                    
+
                     // Добавляем визуальное выделение через заливку
-                    codeParagraph.Range.Shading.BackgroundPatternColor = 
+                    codeParagraph.Range.Shading.BackgroundPatternColor =
                         Microsoft.Office.Interop.Word.WdColor.wdColorGray25; // Светло-серый фон
-                    
+
                     // Добавляем отступы для визуального выделения
                     codeParagraph.Range.ParagraphFormat.LeftIndent = 18; // 0.25 дюйма
                     codeParagraph.Range.ParagraphFormat.RightIndent = 18;
-                    
+
                     // Добавляем отступ сверху и снизу
                     codeParagraph.Range.ParagraphFormat.SpaceBefore = 6;
                     codeParagraph.Range.ParagraphFormat.SpaceAfter = 6;
