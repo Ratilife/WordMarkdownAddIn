@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
+using System.Security.Policy;
 
 namespace WordMarkdownAddIn.Services
 {
@@ -28,195 +30,147 @@ namespace WordMarkdownAddIn.Services
                 .Build();
         }
 
-        private void ProcessMarkdownDocument(Markdig.Syntax.MarkdownDocument doc) 
+        private WordFormattedText ConvertInlineToWordFormattedText(ContainerInline inline)
         {
-            //Обойти все дочерние узлы
-            foreach (var block in doc) 
-            {
-                ProcessBlock(block);
+            var formattedText = new WordFormattedText();
+            //Защита от null
+            if (inline == null)
+            { 
+                return formattedText;
             }
-            // ... другие типы
-        }
 
-        private string GetTextFormInline(Markdig.Syntax.Inlines.ContainerInline inline) 
-        {
-            if (inline == null) return string.Empty;
-
-            var sb = new StringBuilder();
-
-            //Обходим все дочерние элементы
+            // Начинаем обход с первого дочернего элемента
             var current = inline.FirstChild;
             while (current != null) 
             {
+                // Создаем новый FormattedRun для текущего элемента
+                var run = new FormattedRun();
+
+                // Обрабатываем разные типы inline-элементов
                 if (current is LiteralInline literal)
                 {
-                    //Простой текст - просто добавляем
-                    sb.Append(literal.Content.ToString());
+                    // Простой текст без форматирования
+                    run.Text = literal.Content.ToString();
+                    // Все флаги форматирования остаются false(по умолчанию)
                 }
                 else if (current is EmphasisInline emphasis)
                 {
-                    // Жирный или курсив - рекурсивнополучает текст внутри
-                    sb.Append(GetTextFormInline(emphasis));
-                }
-                else if (current is LinkInline link)
-                {
-                    //Ссылка - берем текст ссылки (или URL)
-                    if (link.FirstChild != null)
-                    {
-                        sb.Append(GetTextFormInline(link));
-                    }
-                    else
-                    {
-                        sb.Append(link.Url ?? string.Empty);
-                    }
-
-                }
-                else if (current is CodeInline code) 
-                {
-                    // Инлайн-код
-                    sb.Append(code.Content.ToString());
-                }
-                current = current.NextSibling;
-                
-            }
-            return sb.ToString();
-        }
-
-        private void ApplyInlineToWordRange(ContainerInline inline, Range wordRange)
-        {
-            if (inline == null || wordRange == null)
-                return;
-
-            var current = inline.FirstChild;
-            while (current != null)
-            {
-                if (current is LiteralInline literal)
-                {
-                    // Простой текст - вставляем как есть
-                    wordRange.InsertAfter(literal.Content.ToString());
-                    // Перемещаем курсор в конец вставленного текста
-                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
-                }
-                else if (current is EmphasisInline emphasis)
-                {
-                    // Жирный или курсив
-                    // Сохраняем текущее форматирование
-                    var originalBold = wordRange.Font.Bold;
-                    var originalItalic = wordRange.Font.Italic;
-
-                    // Определяем тип форматирования
-                    bool isBold = emphasis.DelimiterCount == 2;  // **текст** - жирный
-                    bool isItalic = emphasis.DelimiterCount == 1; // *текст* - курсив
-
-                    // Применяем форматирование
-                    if (isBold)
-                        wordRange.Font.Bold = 1;
-                    else if (isItalic)
-                        wordRange.Font.Italic = 1;
-
+                    // Жирный или курсив текст
                     // Рекурсивно обрабатываем содержимое emphasis
-                    ApplyInlineToWordRange(emphasis, wordRange);
+                    var innerText = ConvertInlineToWordFormattedText(emphasis);
 
-                    // Восстанавливаем форматирование
-                    wordRange.Font.Bold = originalBold;
-                    wordRange.Font.Italic = originalItalic;
-                }
-                else if (current is LinkInline link)
-                {
-                    // Ссылка
-                    string linkText = GetTextFormInline(link);
-                    if (string.IsNullOrEmpty(linkText))
-                        linkText = link.Url ?? string.Empty;
+                    // Объединяем весь текст из вложенных элементов
+                    run.Text = string.Join("",innerText.Runs.Select(r => r.Text));
 
-                    // Вставляем текст ссылки
-                    wordRange.InsertAfter(linkText);
-                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
+                    // Определяем тип форматирования по количеству символов
+                    // **текст** = 2 символа = жирный
+                    // *текст* = 1 символ = курсив
+                    run.IsBold = emphasis.DelimiterCount == 2;
+                    run.IsItalic = emphasis.DelimiterCount == 1;
 
-                    // Создаем гиперссылку (опционально)
-                    if (!string.IsNullOrEmpty(link.Url))
+                    // Если внутри emphasis есть вложенное форматирование,
+                    // можно объединить его с текущим
+                    if(innerText.Runs.Count > 0)
                     {
-                        // Можно создать гиперссылку через Hyperlinks.Add()
-                        // Но это сложнее, пока просто вставляем текст
+                        // Берем форматирование из первого вложенного элемента
+                        var firstInner = innerText.Runs[0];
+                        run.IsStrikethrough = firstInner.IsStrikethrough;
+                        run.IsUnderline = firstInner.IsUnderline;
                     }
                 }
                 else if (current is CodeInline code)
                 {
-                    // Инлайн-код - обычно моноширинный шрифт
-                    var originalFont = wordRange.Font.Name;
-                    wordRange.Font.Name = "Courier New"; // или другой моноширинный
-
-                    wordRange.InsertAfter(code.Content.ToString());
-                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
-
-                    wordRange.Font.Name = originalFont;
+                    // Инлайн-код: `код`
+                    run.Text += code.Content.ToString();
+                    // Можно добавить специальное форматирование для кода
+                    // Например, моноширинный шрифт (но это обычно делается на уровне параграфа)
                 }
-                else if (current is LineBreakInline)
+                else if (current is LinkInline link)
+                {
+                    // Ссылка: [текст] (url)
+                    if(link.FirstChild != null)
+                    {
+                        // Есть текст ссылки - рекурсивно получаем его
+                        var linkText = ConvertInlineToWordFormattedText(link);
+                        run.Text = string.Join("", linkText.Runs.Select(r => r.Text));
+                    }
+                    else
+                    {
+                        // Нет текста - используем URL
+                        run.Text = link.Url ?? string.Empty;
+                    }
+
+                    // подчеркивание для ссылок
+                    run.IsUnderline = true;
+                    // URL можно сохранить отдельно, если нужно создать гиперссылку
+                    // Но для простоты пока просто текст с подчеркиванием
+                }
+                else if(current is LineBreakInline)
                 {
                     // Перенос строки
-                    wordRange.InsertAfter("\r");
-                    wordRange.Collapse(WdCollapseDirection.wdCollapseEnd);
+                    run.Text = "\r"; // или "\n" в зависимости от системы
+                }
+                else if (current is HtmlInline html)
+                {
+                    // HTML-теги в Markdown (например, <br>, <strong>)
+                    // Можно обработать специальные теги или просто пропустить
+                    run.Text = html.Tag ?? string.Empty;
+                }
+                else if (current is AutolinkInline autolink)
+                {
+                    // Автоматическая ссылка (например, https://example.com)
+                    run.Text = autolink.Url ?? string.Empty;
+                    run.IsUnderline = true; // Ссылка обычно подчеркнута
+                }
+                else if (current is ContainerInline container)
+                {
+                    // Если это контейнер (может содержать другие элементы)
+                    // Рекурсивно обрабатываем его содержимое
+                    var containerText = ConvertInlineToWordFormattedText(container);
+                    // Объединяем все runs из контейнера
+                    formattedText.Runs.AddRange(containerText.Runs);
+                    current = current.NextSibling;
+                    continue; // Пропускаем добавление run, т.к. уже добавили через AddRange
+                }
+
+                // Добавляем run только если есть текст
+                if (!string.IsNullOrEmpty(run.Text))
+                {
+                    formattedText.Runs.Add(run);
                 }
 
                 // Переходим к следующему элементу
                 current = current.NextSibling;
             }
+
+            return formattedText;
         }
 
-        private string GetCurrentParagraphStyle()
-        {
-            try
-            {
-                // Получаем стиль из позиции курсора
-                if (_wordApp?.Selection?.Range != null)
-                {
-                    string styleName = _wordApp.Selection.Range.get_Style().NameLocal;
-                    // Проверяем, что это стиль параграфа, а не символов
-                    if (!string.IsNullOrEmpty(styleName) && !styleName.StartsWith("Стиль символов"))
-                    {
-                        return styleName;
-                    }
-                }
-            }
-            catch
-            {
-                // Игнорируем ошибки
-            }
 
-            // Возвращаем "Normal" по умолчанию
-            return "Normal";
-        }
 
         //Заголовок
-        private void ProcessHeading(HeadingBlock heading)
+        private IWordElement ProcessHeading(HeadingBlock heading)
         {
-            if (heading == null || _activeDoc == null)
-                return;
-
             try
             {
-                // 1. Извлекаем текст заголовка
-                string headingText = GetTextFormInline(heading.Inline);
+                if (heading == null || _activeDoc == null)
+                return null;
 
-                if (string.IsNullOrEmpty(headingText))
-                    return; // Пустой заголовок - пропускаем
+            
+                //1. Извлекаем текст с форматированием
+                var formattedText = ConvertInlineToWordFormattedText(heading.Inline);
 
-                // 2. Создаем параграф в Word
-                var paragraph = _activeDoc.Content.Paragraphs.Add();
-
-                // 3. Вставляем текст
-                paragraph.Range.Text = headingText;
-
-                // 4. Применяем стиль заголовка
+                // 2. Определяем стиль заголовка
                 string styleName = $"Heading {heading.Level}";
-                paragraph.Range.set_Style(styleName);
 
-                // 5. Добавляем перенос строки после заголовка
-                paragraph.Range.InsertParagraphAfter();
+                // 3. Создаем WordParagraph
+                return new WordParagraph(styleName, formattedText);
             }
             catch (Exception ex)
             {
                 // Обработка ошибок
                 System.Diagnostics.Debug.WriteLine($"Ошибка при обработке заголовка: {ex.Message}");
+                return null;
             }
         }
 
@@ -536,6 +490,7 @@ namespace WordMarkdownAddIn.Services
             }
         }
 
+        //Блок кода
         private void ProcessBlock(Block block)
         {
             if (block == null)
@@ -582,14 +537,26 @@ namespace WordMarkdownAddIn.Services
         public void ApplyMarkdownToWord(string markdown) 
         {
 
-            // 1. Распарсить
+            // 1. Парсим Markdown через Markdig
             var document = Markdown.Parse(markdown, _pipeline);
-            
-            // 2. Обойти дерево
-            ProcessMarkdownDocument(document);
+
+            // 2. Преобразуем в коллекцию IWordElement
+            var elements = new List<IWordElement>();
+            foreach(var block in document)
+            {
+                var element = ProcessBlock(block);
+                if(element != null)
+                    elements.Add(element);
+            }
+
+            // 3. Применяем все элементы к Word
+            foreach(var element in elements)
+            {
+                element.ApplyToWord(_activeDoc);
+            }
 
 
-            
+
         }
         // без форматирования
         public void InsertMarkdownAsPlainText(string markdown) 
