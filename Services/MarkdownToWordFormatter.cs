@@ -3,7 +3,6 @@ using Markdig.Parsers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Markdig.Extensions.Tables;
-using Markdig.Syntax.FencedCodeBlocks;
 using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
@@ -233,7 +232,7 @@ namespace WordMarkdownAddIn.Services
                 var sb = new StringBuilder();
                 
                 // CodeBlock содержит строки кода в свойстве Lines
-                if (codeBlock.Lines != null && codeBlock.Lines.Count > 0)
+                if (codeBlock.Lines.Count > 0)
                 {
                     foreach (var line in codeBlock.Lines)
                     {
