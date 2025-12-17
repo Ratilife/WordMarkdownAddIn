@@ -89,35 +89,32 @@ namespace WordMarkdownAddIn.Services
                 if (run == null || string.IsNullOrEmpty(run.Text))
                     continue;
 
-                // Сохраняем текущее форматирование
-                var originalBold = range.Font.Bold;
-                var originalItalic = range.Font.Italic;
-                var originalStrikethrough = range.Font.StrikeThrough;
-                var originalUnderline = range.Font.Underline;
-                var originalFontName = range.Font.Name;
-                var originalSize = range.Font.Size;
+                // В Word Interop надёжнее сначала вставить текст, затем применить форматирование
+                // к конкретному диапазону вставленного фрагмента.
 
-                // Применяем форматирование из FormattedRun
-                range.Font.Bold = run.IsBold ? 1 : 0;
-                range.Font.Italic = run.IsItalic ? 1 : 0;
-                range.Font.StrikeThrough = run.IsStrikethrough ? 1 : 0;
-                range.Font.Underline = run.IsUnderline ? WdUnderline.wdUnderlineSingle : WdUnderline.wdUnderlineNone;
+                // 1) Запоминаем позицию начала вставки
+                int start = range.End;
 
-                if (run.IsSuperscript)
-                    range.Font.Superscript = 1;
-                else if (run.IsSubscript)
-                    range.Font.Subscript = 1;
-
-                if (run.SmallCaps)
-                    range.Font.SmallCaps = 1;
-                if (run.AllCaps)
-                    range.Font.AllCaps = 1;
-
-                // Вставляем текст
+                // 2) Вставляем текст в конец текущего range
                 range.InsertAfter(run.Text);
-                range.Collapse(WdCollapseDirection.wdCollapseEnd);
 
-                // Восстанавливаем форматирование (опционально, зависит от логики)
+                // 3) Получаем диапазон вставленного текста [start, end)
+                int end = start + run.Text.Length;
+                var insertedRange = doc.Range(start, end);
+
+                // 4) Применяем форматирование к вставленному диапазону
+                insertedRange.Font.Bold = run.IsBold ? -1 : 0;
+                insertedRange.Font.Italic = run.IsItalic ? -1 : 0;
+                insertedRange.Font.StrikeThrough = run.IsStrikethrough ? -1 : 0;
+                insertedRange.Font.Underline = run.IsUnderline ? WdUnderline.wdUnderlineSingle : WdUnderline.wdUnderlineNone;
+
+                insertedRange.Font.Superscript = run.IsSuperscript ? -1 : 0;
+                insertedRange.Font.Subscript = run.IsSubscript ? -1 : 0;
+                insertedRange.Font.SmallCaps = run.SmallCaps ? -1 : 0;
+                insertedRange.Font.AllCaps = run.AllCaps ? -1 : 0;
+
+                // 5) Сдвигаем исходный range в конец, чтобы следующий run вставлялся после этого текста
+                range.SetRange(end, end);
             }
         }
 
@@ -391,6 +388,9 @@ namespace WordMarkdownAddIn.Services
                 // Если стиль не существует, используем Normal
                 paragraph.Range.set_Style("Normal");
             }
+
+            // Очищаем символ конца параграфа перед вставкой текста
+            paragraph.Range.Text = "";
 
             // 3. Применяем форматированный текст через Content
             if (Content != null && Content.Runs.Count > 0)

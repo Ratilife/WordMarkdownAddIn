@@ -59,24 +59,37 @@ namespace WordMarkdownAddIn.Services
                     // Рекурсивно обрабатываем содержимое emphasis
                     var innerText = ConvertInlineToWordFormattedText(emphasis);
 
-                    // Объединяем весь текст из вложенных элементов
-                    run.Text = string.Join("",innerText.Runs.Select(r => r.Text));
-
                     // Определяем тип форматирования по количеству символов
-                    // **текст** = 2 символа = жирный
-                    // *текст* = 1 символ = курсив
-                    run.IsBold = emphasis.DelimiterCount == 2;
-                    run.IsItalic = emphasis.DelimiterCount == 1;
-
-                    // Если внутри emphasis есть вложенное форматирование,
-                    // можно объединить его с текущим
-                    if(innerText.Runs.Count > 0)
+                    
+                    
+                    foreach (var innerRun in innerText.Runs)
                     {
-                        // Берем форматирование из первого вложенного элемента
-                        var firstInner = innerText.Runs[0];
-                        run.IsStrikethrough = firstInner.IsStrikethrough;
-                        run.IsUnderline = firstInner.IsUnderline;
+                        if (emphasis.DelimiterCount == 2)
+                            if (emphasis.DelimiterChar == '*')
+                            {
+                                // **текст** = жирный
+                                innerRun.IsBold = true;
+                            }
+                            else if (emphasis.DelimiterChar == '~')
+                            {
+                                // ~~текст~~ = зачёркнутый
+                                innerRun.IsStrikethrough = true;
+                            }
+
+                        if (emphasis.DelimiterCount == 1)
+                            // *текст* = 1 символ = курсив
+                            innerRun.IsItalic = true;
+                        if(emphasis.DelimiterCount == 3)
+                        {
+                            // ***текст *** =3 жирный + курсив 
+                            innerRun.IsBold = true;
+                            innerRun.IsItalic = true;
+                        }
                     }
+
+                    formattedText.Runs.AddRange(innerText.Runs);
+                    current = current.NextSibling;
+                    continue;
                 }
                 else if (current is CodeInline code)
                 {
