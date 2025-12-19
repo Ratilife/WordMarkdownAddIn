@@ -7,6 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
+using WordMarkdownAddIn.Services; // Для доступа к SyntaxHighlighter
 
 namespace WordMarkdownAddIn.Services
 {
@@ -694,43 +695,52 @@ namespace WordMarkdownAddIn.Services
                 // 1. Создаем новый параграф для блока кода
                 var codeParagraph = doc.Content.Paragraphs.Add();
 
-                // 2. Устанавливаем моноширинный шрифт (стандарт для кода)
-                // Courier New - классический моноширинный шрифт
-                codeParagraph.Range.Font.Name = "Courier New";
-
-                // Устанавливаем размер шрифта (обычно код отображается чуть меньше)
-                codeParagraph.Range.Font.Size = 10;
+                // 2. Сохраняем начальную позицию Range
+                int startPosition = codeParagraph.Range.Start;
 
                 // 3. Вставляем текст кода
                 codeParagraph.Range.Text = Code;
 
-                // 4. Применяем стиль "Code", если он существует в Word
-                // Стиль "Code" обычно имеет:
-                // - Моноширинный шрифт
-                // - Серый фон
-                // - Отступы
-                try
+                // 4. ВАЖНО: Обновляем Range после вставки текста
+                // После установки Text, Range.End автоматически обновляется
+                // Нужно получить актуальный Range с вставленным текстом
+                int rangeStart = codeParagraph.Range.Start;
+                int rangeEnd = codeParagraph.Range.End;
+                
+                // Создаём новый Range для работы с вставленным кодом
+                Microsoft.Office.Interop.Word.Range codeRange = doc.Range(rangeStart, rangeEnd - 1); // -1 чтобы исключить символ параграфа
+
+                // 5. Устанавливаем моноширинный шрифт (стандарт для кода)
+                // Consolas - современный моноширинный шрифт
+                codeRange.Font.Name = "Consolas";
+                codeRange.Font.Size = 10;
+
+                // 6. ПРИМЕНЯЕМ ПОДСВЕТКУ СИНТАКСИСА (ПЕРЕД применением стиля!)
+                // Нормализуем язык (приводим к нижнему регистру)
+                string normalizedLanguage = (Language ?? "").ToLower().Trim();
+                if (string.IsNullOrEmpty(normalizedLanguage))
                 {
-                    codeParagraph.Range.set_Style("Code");
+                    normalizedLanguage = "python"; // Язык по умолчанию
                 }
-                catch
-                {
-                    // Если стиль "Code" не существует, используем "Normal"
-                    // и применяем форматирование вручную
-                    codeParagraph.Range.set_Style("Normal");
 
-                    // Добавляем визуальное выделение через заливку
-                    codeParagraph.Range.Shading.BackgroundPatternColor =
-                        Microsoft.Office.Interop.Word.WdColor.wdColorGray25; // Светло-серый фон
+                // Применяем подсветку синтаксиса к вставленному коду
+                SyntaxHighlighter.HighlightCodeBlock(codeRange, Code, normalizedLanguage);
 
-                    // Добавляем отступы для визуального выделения
-                    codeParagraph.Range.ParagraphFormat.LeftIndent = 18; // 0.25 дюйма
-                    codeParagraph.Range.ParagraphFormat.RightIndent = 18;
+                // 7. Применяем визуальное форматирование (фон, отступы) БЕЗ стиля
+                // НЕ применяем стиль "Code", так как он может перезаписать цвета подсветки
+                codeRange.set_Style("Normal");
 
-                    // Добавляем отступ сверху и снизу
-                    codeParagraph.Range.ParagraphFormat.SpaceBefore = 6;
-                    codeParagraph.Range.ParagraphFormat.SpaceAfter = 6;
-                }
+                // Добавляем визуальное выделение через заливку
+                codeRange.Shading.BackgroundPatternColor =
+                    Microsoft.Office.Interop.Word.WdColor.wdColorGray25; // Светло-серый фон
+
+                // Добавляем отступы для визуального выделения
+                codeRange.ParagraphFormat.LeftIndent = 18; // 0.25 дюйма
+                codeRange.ParagraphFormat.RightIndent = 18;
+
+                // Добавляем отступ сверху и снизу
+                codeRange.ParagraphFormat.SpaceBefore = 6;
+                codeRange.ParagraphFormat.SpaceAfter = 6;
 
                 // 5. Добавляем перенос строки после блока кода
                 // Это создает визуальное разделение между кодом и следующим элементом
