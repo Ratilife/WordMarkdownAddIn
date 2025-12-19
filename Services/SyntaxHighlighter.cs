@@ -189,6 +189,8 @@ namespace WordMarkdownAddIn.Services
             tokens = tokens.OrderBy(t => t.StartPosition).ToList();
 
             // 7. Заполняем пробелы между токенами (текст, который не попал ни под один паттерн)
+            // Пробелы и переносы строк не нужно добавлять как отдельные токены,
+            // так как они будут сохранять форматирование по умолчанию
             var result = new List<Token>();
             int currentPosition = 0;
 
@@ -198,10 +200,14 @@ namespace WordMarkdownAddIn.Services
                 if (token.StartPosition > currentPosition)
                 {
                     string gapText = code.Substring(currentPosition, token.StartPosition - currentPosition);
+                    // Добавляем пробелы только если это не просто пробелы/переносы строк
+                    // Пробелы будут сохранять форматирование по умолчанию и не будут перезаписывать цвета
                     if (!string.IsNullOrEmpty(gapText))
                     {
                         // Определяем тип для пробела
                         TokenType gapType = DetermineGapType(gapText);
+                        // Добавляем только если это не просто пробелы/переносы строк
+                        // Пробелы с типом Default не будут форматироваться, что правильно
                         result.Add(new Token(gapText, gapType, currentPosition, token.StartPosition));
                     }
                 }
@@ -272,34 +278,81 @@ namespace WordMarkdownAddIn.Services
             if (string.IsNullOrEmpty(originalCode))
                 return;
 
+            // Получаем текст из Range для проверки соответствия
+            string rangeText = range.Text;
+            
+            // Убираем символ конца параграфа из rangeText для корректного сравнения
+            // Word добавляет \r (символ возврата каретки) в конце Range параграфа
+            string normalizedRangeText = rangeText.TrimEnd('\r', '\n', '\a');
+            
+            // Проверяем, что текст Range соответствует originalCode (с учетом возможных различий в переносах строк)
+            // Нормализуем оба текста для сравнения
+            string normalizedCode = originalCode.Replace("\r\n", "\n").Replace("\r", "\n");
+            string normalizedRange = normalizedRangeText.Replace("\r\n", "\n").Replace("\r", "\n");
+            
+            // ВАЖНО: Используем реальный текст из Range для определения длины
+            // Это гарантирует, что мы не выйдем за границы Range
+            int maxLength = normalizedRange.Length;
+            int rangeStart = range.Start;
+
+            // Если тексты не совпадают, выводим предупреждение, но продолжаем работу
+            if (normalizedCode != normalizedRange)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Предупреждение: текст Range не соответствует originalCode. Range length: {normalizedRange.Length}, Code length: {normalizedCode.Length}");
+                System.Diagnostics.Debug.WriteLine($"Range text (first 50 chars): {normalizedRange.Substring(0, Math.Min(50, normalizedRange.Length))}");
+                System.Diagnostics.Debug.WriteLine($"Code text (first 50 chars): {normalizedCode.Substring(0, Math.Min(50, normalizedCode.Length))}");
+            }
+
             // Применяем форматирование к каждому токену
             foreach (var token in tokens)
             {
-                // Проверяем границы токена
+                // Проверяем границы токена относительно originalCode
                 if (token.StartPosition < 0 || 
                     token.EndPosition <= token.StartPosition ||
-                    token.StartPosition >= originalCode.Length ||
-                    token.EndPosition > originalCode.Length)
+                    token.StartPosition >= maxLength ||
+                    token.EndPosition > maxLength)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Токен пропущен: позиция [{token.StartPosition}-{token.EndPosition}] выходит за границы (maxLength={maxLength})");
                     continue;
+                }
 
                 try
                 {
                     // Вычисляем абсолютные позиции в документе
-                    int tokenStart = range.Start + token.StartPosition;
-                    int tokenEnd = range.Start + token.EndPosition;
+                    // Позиции токенов считаются относительно начала originalCode
+                    int tokenStart = rangeStart + token.StartPosition;
+                    int tokenEnd = rangeStart + token.EndPosition;
 
                     // Проверяем, что позиции в пределах Range
-                    if (tokenStart < range.Start || tokenEnd > range.End)
+                    if (tokenStart < rangeStart || tokenEnd > range.End)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Токен пропущен: позиции [{tokenStart}-{tokenEnd}] выходят за границы Range [{rangeStart}-{range.End}]");
                         continue;
+                    }
 
                     // Создаём поддиапазон для текущего токена
                     Word.Range tokenRange = range.Duplicate;
                     tokenRange.SetRange(tokenStart, tokenEnd);
 
+                    // Проверяем, что текст токена совпадает с ожидаемым
+                    string tokenTextInRange = tokenRange.Text.TrimEnd('\r', '\n', '\a');
+                    if (tokenTextInRange != token.Text)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Предупреждение: текст токена не совпадает. Ожидалось: '{token.Text}', получено: '{tokenTextInRange}'");
+                        // Продолжаем работу, так как это может быть из-за форматирования Word
+                    }
+
                     // Применяем цвет в зависимости от типа токена
-                    if (TokenColors.ContainsKey(token.Type))
+                    // Пропускаем токены с Default типом, чтобы не перезаписывать форматирование
+                    if (token.Type != TokenType.Default && TokenColors.ContainsKey(token.Type))
                     {
                         tokenRange.Font.Color = TokenColors[token.Type];
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Применен цвет {TokenColors[token.Type]} к токену '{token.Text}' типа {token.Type}");
                     }
 
                     // Дополнительное форматирование для ключевых слов и встроенных функций
@@ -349,19 +402,41 @@ namespace WordMarkdownAddIn.Services
         public static void HighlightCodeBlock(Word.Range range, string code, string language = "python")
         {
             if (range == null || string.IsNullOrEmpty(code))
+            {
+                System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: range или code пусты");
                 return;
+            }
 
             try
             {
+                // Нормализуем язык
+                string normalizedLanguage = (language ?? "").ToLower().Trim();
+                if (string.IsNullOrEmpty(normalizedLanguage))
+                {
+                    normalizedLanguage = "python";
+                }
+
+                System.Diagnostics.Debug.WriteLine($"HighlightCodeBlock: начинаем подсветку. Язык: '{normalizedLanguage}', Длина кода: {code.Length}");
+                
                 // 1. Парсим код на токены
-                List<Token> tokens = ParseCode(code, language);
+                List<Token> tokens = ParseCode(code, normalizedLanguage);
+                
+                System.Diagnostics.Debug.WriteLine($"HighlightCodeBlock: найдено токенов: {tokens.Count}");
+                
+                if (tokens.Count == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: токены не найдены. Проверьте, поддерживается ли язык.");
+                    return;
+                }
                 
                 // 2. Применяем форматирование к Range
                 ApplyHighlightingToWordRange(range, tokens, code);
+                
+                System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: подсветка применена успешно");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Ошибка подсветки синтаксиса: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Ошибка подсветки синтаксиса: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
