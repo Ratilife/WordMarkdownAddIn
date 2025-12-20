@@ -296,11 +296,12 @@ namespace WordMarkdownAddIn.Services
         }
 
         // 1. Таблицы
-        private List<IWordElement> ExtractTables(List<IWordElement> elements) 
+        // 1. Таблицы
+        private List<IWordElement> ExtractTables(List<IWordElement> elements)
         {
             foreach (Table table in _activeDoc.Tables)
             {
-                var tableData = new List<List<WordFormattedText>>(); // Изменён тип
+                var tableData = new List<List<WordFormattedText>>();
 
                 for (int i = 1; i <= table.Rows.Count; i++)
                 {
@@ -308,18 +309,31 @@ namespace WordMarkdownAddIn.Services
                     for (int j = 1; j <= table.Columns.Count; j++)
                     {
                         Range cellRange = table.Cell(i, j).Range;
-                        string cellText = cellRange.Text.TrimEnd('\r', '\a'); // Обрезаем специальные символы Word
-                        // Создаём экземпляр WordFormattedText из строки
-                        var formattedCellText = ExtractFormattedContent(cellRange);
+
+                        // УЛУЧШЕННАЯ ОЧИСТКА: Убираем все служебные символы Word
+                        // Создаем копию Range без последнего символа (который обычно является маркером конца ячейки)
+                        int cellStart = cellRange.Start;
+                        int cellEnd = cellRange.End;
+
+                        // Исключаем последний символ, если это маркер конца ячейки
+                        if (cellEnd > cellStart)
+                        {
+                            cellEnd--; // Исключаем последний символ
+                        }
+
+                        // Создаем новый Range без маркера конца ячейки
+                        Range cleanCellRange = _activeDoc.Range(cellStart, cellEnd);
+
+                        // Извлекаем форматированный контент из очищенного Range
+                        var formattedCellText = ExtractFormattedContent(cleanCellRange);
                         rowData.Add(formattedCellText);
                     }
                     tableData.Add(rowData);
                 }
-               elements.Add(new WordTable(tableData));
+                elements.Add(new WordTable(tableData));
             }
-            
-            return elements;
 
+            return elements;
         }
 
         // 2. Параграфы
