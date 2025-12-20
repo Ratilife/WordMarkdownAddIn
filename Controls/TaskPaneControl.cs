@@ -611,16 +611,24 @@ namespace WordMarkdownAddIn.Controls
                 html, body { 
                     height: 100%; 
                     margin: 0; 
+                    padding: 0;
                     font-family: Segoe UI, Arial, sans-serif; 
+                    overflow: hidden;
+                    display: flex;
+                    flex-direction: column;
                 }   
                 
                 /* Панель управления режимами */
                 .view-controls {
-                    display: flex;
+                    display: flex !important;
+                    flex-shrink: 0;
                     gap: 4px;
                     padding: 8px;
                     background: #f5f5f5;
                     border-bottom: 1px solid #ddd;
+                    min-height: 40px;
+                    box-sizing: border-box;
+                    z-index: 10;
                 }
                 
                 .view-btn {
@@ -645,7 +653,9 @@ namespace WordMarkdownAddIn.Controls
                 
                 .container { 
                     display: flex; 
-                    height: calc(100% - 45px); 
+                    flex: 1;
+                    min-height: 0;
+                    overflow: hidden;
                 }
                 
                 #editor { 

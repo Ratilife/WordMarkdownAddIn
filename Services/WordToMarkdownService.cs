@@ -14,6 +14,17 @@ namespace WordMarkdownAddIn.Services
 {
     public class WordToMarkdownService
     {
+ 
+        /// <summary>
+        /// Вспомогательный класс для хранения элемента документа вместе с его позицией.
+        /// Используется для правильной сортировки элементов по порядку их появления в документе.
+        /// </summary>
+        private class ElementWithPosition
+        {
+            public IWordElement Element { get; set; }
+            public int Position { get; set; }
+        }
+
         private readonly Application _wordApp;
         private readonly Document _activeDoc;
 
@@ -38,88 +49,24 @@ namespace WordMarkdownAddIn.Services
         /// <returns>Список элементов документа в порядке их появления.</returns>
         public List<IWordElement> ExtractDocumentStructure()
         {
-            var elements = new List<IWordElement>();
+            // ✅ ИЗМЕНИТЬ: Используем новый тип ElementWithPosition вместо IWordElement
+            var elements = new List<ElementWithPosition>();
 
-            // Извлекаем параграфы (они уже идут в порядке документа)
+            // Извлекаем параграфы (теперь они сохраняют позицию при извлечении)
             elements = ExtractParagraphs(elements);
             
-            // Извлекаем таблицы (они также идут в порядке документа)
+            // Извлекаем таблицы (теперь они сохраняют позицию при извлечении)
             elements = ExtractTables(elements);
             
-            // Сортируем элементы по их позиции в документе для правильного порядка
-            // Создаем список с информацией о позиции
-            var elementsWithPosition = new List<(IWordElement element, int position)>();
-            
-            foreach (var element in elements)
-            {
-                int position = GetElementStartPosition(element);
-                elementsWithPosition.Add((element, position));
-            }
-            
-            // Сортируем по позиции и возвращаем только элементы
-            return elementsWithPosition
-                .OrderBy(x => x.position)
-                .Select(x => x.element)
+            // ✅ ИЗМЕНИТЬ: Просто сортируем по позиции и возвращаем только элементы
+            // Больше не нужно вызывать GetElementStartPosition, так как позиция уже сохранена
+            return elements
+                .OrderBy(x => x.Position)
+                .Select(x => x.Element)
                 .ToList();
         }
 
-        /// <summary>
-        /// Получает начальную позицию элемента в документе для сортировки.
-        /// Использует индекс элементов в коллекциях Word для определения позиции.
-        /// </summary>
-        private int GetElementStartPosition(IWordElement element)
-        {
-            try
-            {
-                if (element is WordTable wordTable)
-                {
-                    // Для таблиц используем индекс в коллекции таблиц
-                    int tableIndex = 0;
-                    foreach (Table table in _activeDoc.Tables)
-                    {
-                        // Сопоставляем таблицу по содержимому первой ячейки
-                        // (упрощенная логика - можно улучшить для более точного сопоставления)
-                        if (table.Rows.Count > 0 && table.Columns.Count > 0)
-                        {
-                            string firstCellText = table.Cell(1, 1).Range.Text.TrimEnd('\r', '\a');
-                            if (wordTable.Rows.Count > 0 && wordTable.Rows[0].Count > 0)
-                            {
-                                string wordTableFirstCell = wordTable.Rows[0][0]?.ToMarkdown() ?? "";
-                                if (firstCellText.Contains(wordTableFirstCell) || 
-                                    wordTableFirstCell.Contains(firstCellText) ||
-                                    tableIndex < _activeDoc.Tables.Count)
-                                {
-                                    return table.Range.Start;
-                                }
-                            }
-                        }
-                        tableIndex++;
-                    }
-                }
-                else
-                {
-                    // Для параграфов и других элементов используем индекс в коллекции параграфов
-                    int paraIndex = 0;
-                    foreach (Paragraph para in _activeDoc.Paragraphs)
-                    {
-                        string text = para.Range.Text.TrimEnd('\r', '\a');
-                        if (!string.IsNullOrEmpty(text))
-                        {
-                            // Упрощенная проверка - используем индекс
-                            // В реальности можно улучшить сопоставление по содержимому
-                            return para.Range.Start;
-                        }
-                        paraIndex++;
-                    }
-                }
-            }
-            catch
-            {
-                // В случае ошибки возвращаем большое значение
-            }
-            
-            return int.MaxValue; // Если не удалось определить позицию
-        }
+  
 
         /// <summary>
         /// Преобразует структуру документа Word в строку Markdown.
@@ -295,9 +242,10 @@ namespace WordMarkdownAddIn.Services
             return formattedText;
         }
 
+       
         // 1. Таблицы
-        // 1. Таблицы
-        private List<IWordElement> ExtractTables(List<IWordElement> elements)
+        
+        private List<ElementWithPosition> ExtractTables(List<ElementWithPosition> elements)
         {
             foreach (Table table in _activeDoc.Tables)
             {
@@ -310,7 +258,7 @@ namespace WordMarkdownAddIn.Services
                     {
                         Range cellRange = table.Cell(i, j).Range;
 
-                        // УЛУЧШЕННАЯ ОЧИСТКА: Убираем все служебные символы Word
+                        
                         // Создаем копию Range без последнего символа (который обычно является маркером конца ячейки)
                         int cellStart = cellRange.Start;
                         int cellEnd = cellRange.End;
@@ -330,14 +278,22 @@ namespace WordMarkdownAddIn.Services
                     }
                     tableData.Add(rowData);
                 }
-                elements.Add(new WordTable(tableData));
+                
+                //  Сохраняем элемент вместе с его позицией в документе
+                var wordTable = new WordTable(tableData);
+                elements.Add(new ElementWithPosition 
+                { 
+                    Element = wordTable, 
+                    Position = table.Range.Start  // Сохраняем позицию начала таблицы
+                });
             }
 
             return elements;
         }
 
         // 2. Параграфы
-        private List<IWordElement> ExtractParagraphs(List<IWordElement> elements )
+        
+        private List<ElementWithPosition> ExtractParagraphs(List<ElementWithPosition> elements )
         {
             // Обходим все параграфы
             foreach (Paragraph para in _activeDoc.Paragraphs)
@@ -351,6 +307,10 @@ namespace WordMarkdownAddIn.Services
                 string text = para.Range.Text.TrimEnd('\r', '\a');
                 
                 if (string.IsNullOrEmpty(text)) continue;
+                
+                // ✅ ДОБАВИТЬ: Сохраняем позицию параграфа для последующей сортировки
+                int paragraphPosition = para.Range.Start;
+                
                 //Определяем тип параграфа
                 string styleName = para.get_Style().NameLocal;
 
@@ -360,7 +320,12 @@ namespace WordMarkdownAddIn.Services
                     var content = ExtractFormattedContent(para.Range);
                     // Создаем WordParagraph с именем стиля и контентом.
                     // Уровень заголовка (HeadingLevel) будет вычислен автоматически при обращении к свойству.
-                    elements.Add(new WordParagraph(styleName, content));
+                    // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
+                    elements.Add(new ElementWithPosition 
+                    { 
+                        Element = new WordParagraph(styleName, content), 
+                        Position = paragraphPosition 
+                    });
                     // Больше ничего делать не нужно, свойство HeadingLevel внутри WordParagraph сделает свою работу.
                 }
                 else if (styleName == "List Paragraph")
@@ -370,32 +335,57 @@ namespace WordMarkdownAddIn.Services
                     // Это элемент списка
                     var content = ExtractFormattedContent(para.Range);
                     var contentList = new List<WordFormattedText> { content }; // Создаем список и добавляем один элемент
-                    elements.Add(new WordListItem(contentList, isOrdered)); // Создаем WordListItem
+                    // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
+                    elements.Add(new ElementWithPosition 
+                    { 
+                        Element = new WordListItem(contentList, isOrdered), 
+                        Position = paragraphPosition 
+                    });
                 }
                 else if (styleName == "Quote")
                 {
                     // Это цитата
                     var content = ExtractFormattedContent(para.Range);
-                    elements.Add(new WordQuote(text, content)); // Создаем WordQuote
+                    // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
+                    elements.Add(new ElementWithPosition 
+                    { 
+                        Element = new WordQuote(text, content), 
+                        Position = paragraphPosition 
+                    });
                 }
                 else if (styleName == "Subtitle")
                 {
                     // Это подзаголовок
                     var content = ExtractFormattedContent(para.Range);
-                    elements.Add(new WordSubtitle(text, content)); // Создаем WordSubtitle
+                    // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
+                    elements.Add(new ElementWithPosition 
+                    { 
+                        Element = new WordSubtitle(text, content), 
+                        Position = paragraphPosition 
+                    });
                 }
                 else if (styleName == "Title")
                 {
                     // Это название документа
                     var content = ExtractFormattedContent(para.Range);
-                    elements.Add(new WordTitle(text, content)); // Создаем WordTitle
+                    // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
+                    elements.Add(new ElementWithPosition 
+                    { 
+                        Element = new WordTitle(text, content), 
+                        Position = paragraphPosition 
+                    });
                 }
                 else 
                 {
                     if (!string.IsNullOrEmpty(text)) // Пример фильтрации
                     {
                         var content = ExtractFormattedContent(para.Range);
-                        elements.Add(new WordParagraph( para.get_Style().NameLocal, content));
+                        // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
+                        elements.Add(new ElementWithPosition 
+                        { 
+                            Element = new WordParagraph(para.get_Style().NameLocal, content), 
+                            Position = paragraphPosition 
+                        });
                     }
                 }
             }
