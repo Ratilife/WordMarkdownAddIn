@@ -145,9 +145,44 @@ namespace WordMarkdownAddIn.Services
         {
             Rows = rows ?? new List<List<WordFormattedText>>(); // защита от null
         }
+
+        // Вспомогательный метод для нормализации содержимого ячейки
+        private string NormalizeCellContent(string cellContent)
+        {
+            if (string.IsNullOrEmpty(cellContent))
+                return "";
+
+            // Заменяем переносы строк на пробелы
+            cellContent = cellContent.Replace("\r\n", " ")
+                                     .Replace("\n", " ")
+                                     .Replace("\r", " ");
+
+            // Убираем множественные пробелы
+            cellContent = System.Text.RegularExpressions.Regex.Replace(cellContent, @"\s+", " ");
+
+            // Экранируем символы |
+            cellContent = cellContent.Replace("|", "\\|");
+
+            return cellContent.Trim();
+        }
+
         public string ToMarkdown()
         {
             if (Rows == null || Rows.Count == 0)
+                return "";
+
+            // Находим максимальное количество колонок
+            int maxColumns = 0;
+            foreach (var row in Rows)
+            {
+                if (row != null && row.Count > maxColumns)
+                {
+                    maxColumns = row.Count;
+                }
+            }
+
+            // Если нет колонок, возвращаем пустую строку
+            if (maxColumns == 0)
                 return "";
 
             var sb = new StringBuilder();
@@ -158,19 +193,28 @@ namespace WordMarkdownAddIn.Services
                 var headerRow = Rows[0];
                 if (headerRow != null && headerRow.Count > 0)
                 {
+                    //  Нормализуем заголовок - добавляем пустые ячейки если нужно
+                    while (headerRow.Count < maxColumns)
+                    {
+                        headerRow.Add(new WordFormattedText()); // Добавляем пустую ячейку
+                    }
+
                     // Заголовок таблицы
                     sb.Append("| ");
-                    foreach (var cell in headerRow)
+                    for (int i = 0; i < maxColumns; i++)
                     {
+                        var cell = i < headerRow.Count ? headerRow[i] : null;
                         string cellContent = cell?.ToMarkdown() ?? "";
+                        // Обработка переносов строк (из Проблемы 2)
+                        cellContent = NormalizeCellContent(cellContent);
                         sb.Append(cellContent.Replace("|", "\\|")); // Экранируем символы |
                         sb.Append(" | ");
                     }
                     sb.AppendLine();
 
                     // Разделитель заголовка
-                    sb.Append("|");
-                    for (int i = 0; i < headerRow.Count; i++)
+                    sb.Append("| ");
+                    for (int i = 0; i < maxColumns; i++)
                     {
                         sb.Append(" --- |");
                     }
@@ -183,11 +227,20 @@ namespace WordMarkdownAddIn.Services
                     var row = Rows[i];
                     if (row != null && row.Count > 0)
                     {
-                        sb.Append("| ");
-                        foreach (var cell in row)
+                        // Нормализуем каждую строку данных
+                        while (row.Count < maxColumns)
                         {
+                            row.Add(new WordFormattedText()); // Добавляем пустую ячейку
+                        }
+
+                        sb.Append("| ");
+                        for (int j = 0; j < maxColumns; j++)
+                        {
+                            var cell = j < row.Count ? row[j] : null;
                             string cellContent = cell?.ToMarkdown() ?? "";
-                            sb.Append(cellContent.Replace("|", "\\|")); // Экранируем символы |
+                            // Обработка переносов строк (из Проблемы 2)
+                            cellContent = NormalizeCellContent(cellContent);
+                            sb.Append(cellContent);
                             sb.Append(" | ");
                         }
                         sb.AppendLine();
