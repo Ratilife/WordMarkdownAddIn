@@ -71,12 +71,12 @@ namespace WordMarkdownAddIn.Services
             new Dictionary<TokenType, Word.WdColor>
         {
             [TokenType.Keyword] =       Word.WdColor.wdColorBlue,       // Синий для ключевых слов
-            [TokenType.String] =        Word.WdColor.wdColorGreen,      // Зелёный для строк
-            [TokenType.Comment] =       Word.WdColor.wdColorGray25,     // Серый для комментариев
+            [TokenType.String] =        Word.WdColor.wdColorGray95,     // Серый для комментариев
+            [TokenType.Comment] =       Word.WdColor.wdColorGreen,      // Зелёный для строк
             [TokenType.Number] =        Word.WdColor.wdColorOrange,     // Оранжевый для чисел
             [TokenType.Operator] =      Word.WdColor.wdColorDarkRed,    // Тёмно-красный для операторов
             [TokenType.Builtin] =       Word.WdColor.wdColorTeal,       // Бирюзовый для встроенных функций
-            [TokenType.Type] =          Word.WdColor.wdColorDarkBlue,    // Тёмно-синий для типов
+            [TokenType.Type] =          Word.WdColor.wdColorDarkBlue,   // Тёмно-синий для типов
             [TokenType.Constant] =      Word.WdColor.wdColorViolet,     // Фиолетовый для констант
             [TokenType.Decorator] =     Word.WdColor.wdColorPink,       // Розовый для декораторов
             [TokenType.Regex] =         Word.WdColor.wdColorOliveGreen, // Оливковый для регулярных выражений
