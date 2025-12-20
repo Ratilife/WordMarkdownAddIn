@@ -328,6 +328,11 @@ namespace WordMarkdownAddIn.Services
             // Обходим все параграфы
             foreach (Paragraph para in _activeDoc.Paragraphs)
             {
+                // ПРОВЕРКА: Пропускаем параграфы, которые находятся внутри таблиц
+                if (IsParagraphInTable(para))
+                {
+                    continue; // Пропускаем этот параграф
+                }
                 // Убираем символ конца параграфа
                 string text = para.Range.Text.TrimEnd('\r', '\a');
                 
@@ -382,6 +387,30 @@ namespace WordMarkdownAddIn.Services
             }
             return elements;
 
+        }
+
+        // Вспомогательный метод для проверки, находится ли параграф внутри таблицы
+        private bool IsParagraphInTable(Paragraph para)
+        {
+            try
+            {
+                // Проверяем, пересекается ли Range параграфа с какой-либо таблицей
+                foreach (Table table in _activeDoc.Tables)
+                {
+                    // Если начало или конец параграфа находится внутри Range таблицы
+                    if (para.Range.Start >= table.Range.Start &&
+                        para.Range.End <= table.Range.End)
+                    {
+                        return true; // Параграф находится внутри таблицы
+                    }
+                }
+            }
+            catch
+            {
+                // В случае ошибки считаем, что параграф не в таблице
+            }
+
+            return false; // Параграф не находится внутри таблицы
         }
 
         // 3. Гиперссылки
