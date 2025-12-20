@@ -14,9 +14,12 @@ namespace WordMarkdownAddIn.Services
             {
                 ["python"] = GetPythonPatterns(),
                 ["csharp"] = GetCSharpPatterns(),
+                ["cs"] = GetCSharpPatterns(),
                 ["java"] = GetJavaPatterns(),
                 ["javascript"] = GetJavaScriptPatterns(),
+                ["js"] = GetJavaScriptPatterns(),
                 ["1c"] = Get1CPatterns()
+                
             };
 
         private static Dictionary<TokenType, string> GetPythonPatterns()

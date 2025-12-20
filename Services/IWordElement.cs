@@ -708,28 +708,21 @@ namespace WordMarkdownAddIn.Services
                 int rangeEnd = codeParagraph.Range.End;
                 
                 // Создаём новый Range для работы с вставленным кодом
-                Microsoft.Office.Interop.Word.Range codeRange = doc.Range(rangeStart, rangeEnd - 1); // -1 чтобы исключить символ параграфа
+                // Исключаем символ конца параграфа (\r) из Range
+                // Проверяем, что rangeEnd > rangeStart перед вычитанием
+                int codeRangeEnd = rangeEnd > rangeStart ? rangeEnd - 1 : rangeEnd;
+                Microsoft.Office.Interop.Word.Range codeRange = doc.Range(rangeStart, codeRangeEnd);
 
                 // 5. Устанавливаем моноширинный шрифт (стандарт для кода)
                 // Consolas - современный моноширинный шрифт
                 codeRange.Font.Name = "Consolas";
                 codeRange.Font.Size = 10;
 
-                // 6. ПРИМЕНЯЕМ ПОДСВЕТКУ СИНТАКСИСА (ПЕРЕД применением стиля!)
-                // Нормализуем язык (приводим к нижнему регистру)
-                string normalizedLanguage = (Language ?? "").ToLower().Trim();
-                if (string.IsNullOrEmpty(normalizedLanguage))
-                {
-                    normalizedLanguage = "python"; // Язык по умолчанию
-                }
+                // 6. ПРИМЕНЯЕМ СТИЛЬ ПЕРЕД ПОДСВЕТКОЙ, чтобы не перезаписать цвета
+                // Применяем стиль "Normal" для базового форматирования
+                //codeRange.set_Style("Normal");
 
-                // Применяем подсветку синтаксиса к вставленному коду
-                SyntaxHighlighter.HighlightCodeBlock(codeRange, Code, normalizedLanguage);
-
-                // 7. Применяем визуальное форматирование (фон, отступы) БЕЗ стиля
-                // НЕ применяем стиль "Code", так как он может перезаписать цвета подсветки
-                codeRange.set_Style("Normal");
-
+                // 7. Применяем визуальное форматирование (фон, отступы) ПЕРЕД подсветкой
                 // Добавляем визуальное выделение через заливку
                 codeRange.Shading.BackgroundPatternColor =
                     Microsoft.Office.Interop.Word.WdColor.wdColorGray25; // Светло-серый фон
@@ -742,7 +735,20 @@ namespace WordMarkdownAddIn.Services
                 codeRange.ParagraphFormat.SpaceBefore = 6;
                 codeRange.ParagraphFormat.SpaceAfter = 6;
 
-                // 5. Добавляем перенос строки после блока кода
+                // 8. ПРИМЕНЯЕМ ПОДСВЕТКУ СИНТАКСИСА ПОСЛЕ применения стиля и форматирования
+                // Нормализуем язык (приводим к нижнему регистру)
+                string normalizedLanguage = (Language ?? "").ToLower().Trim();
+                if (string.IsNullOrEmpty(normalizedLanguage))
+                {
+                    normalizedLanguage = "python"; // Язык по умолчанию
+                }
+
+                // Применяем подсветку синтаксиса к вставленному коду
+                // Это должно быть последним, чтобы цвета не были перезаписаны
+                //SyntaxHighlighter.HighlightCodeBlock(codeRange, Code, normalizedLanguage);
+                SyntaxHighlighterDiagnostics.DiagnoseTokenPositions(codeRange, Code, normalizedLanguage);
+
+                // 9. Добавляем перенос строки после блока кода
                 // Это создает визуальное разделение между кодом и следующим элементом
                 codeParagraph.Range.InsertParagraphAfter();
             }

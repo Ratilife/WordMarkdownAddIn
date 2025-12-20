@@ -253,6 +253,7 @@
     <Compile Include="Services\MarkdownRenderService.cs" />
     <Compile Include="Services\MarkdownToWordFormatter.cs" />
     <Compile Include="Services\SyntaxHighlighter.cs" />
+    <Compile Include="Services\SyntaxHighlighter_Diagnostics.cs" />
     <Compile Include="Services\WordToMarkdownService.cs" />
     <Compile Include="ThisAddIn.cs">
       <SubType>Code</SubType>
