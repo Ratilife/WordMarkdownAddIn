@@ -804,7 +804,8 @@ namespace WordMarkdownAddIn.Services
 
                 // Применяем подсветку синтаксиса к вставленному коду
                 // Это должно быть последним, чтобы цвета не были перезаписаны
-                SyntaxHighlighter.HighlightCodeBlock(codeRange, Code, normalizedLanguage);
+                // Теперь передаем только Range и язык - токены будут парситься из реального текста Word
+                SyntaxHighlighter.HighlightCodeBlock(codeRange, normalizedLanguage);
 
                 // 6. Добавляем пустой параграф после кода
                 doc.Content.Paragraphs.Add();

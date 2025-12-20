@@ -262,52 +262,40 @@ namespace WordMarkdownAddIn.Services
         }
 
         /// <summary>
-        /// Применяет подсветку синтаксиса к указанному диапазону текста в Word документе
+        /// Применяет подсветку синтаксиса к указанному диапазону текста в Word документе.
+        /// Токены должны быть распарсены из того же текста, к которому применяются (normalizedCode).
         /// </summary>
         /// <param name="range">Диапазон текста в Word документе</param>
-        /// <param name="tokens">Список токенов с информацией о типах и позициях</param>
-        /// <param name="originalCode">Исходный код (для проверки соответствия)</param>
+        /// <param name="tokens">Список токенов с информацией о типах и позициях (позиции относительно normalizedCode)</param>
+        /// <param name="normalizedCode">Нормализованный код (текст из Range, где все переносы строк приведены к \n)</param>
         public static void ApplyHighlightingToWordRange(
             Word.Range range,
             List<Token> tokens,
-            string originalCode)
+            string normalizedCode)
         {
             if (range == null || tokens == null || tokens.Count == 0)
                 return;
 
-            if (string.IsNullOrEmpty(originalCode))
+            if (string.IsNullOrEmpty(normalizedCode))
                 return;
 
-            // Получаем текст из Range для проверки соответствия
+            // Получаем реальный текст из Range для определения границ
             string rangeText = range.Text;
-            
-            // Убираем символ конца параграфа из rangeText для корректного сравнения
-            // Word добавляет \r (символ возврата каретки) в конце Range параграфа
             string normalizedRangeText = rangeText.TrimEnd('\r', '\n', '\a');
-            
-            // Проверяем, что текст Range соответствует originalCode (с учетом возможных различий в переносах строк)
-            // Нормализуем оба текста для сравнения
-            string normalizedCode = originalCode.Replace("\r\n", "\n").Replace("\r", "\n");
             string normalizedRange = normalizedRangeText.Replace("\r\n", "\n").Replace("\r", "\n");
             
-            // ВАЖНО: Используем реальный текст из Range для определения длины
-            // Это гарантирует, что мы не выйдем за границы Range
-            int maxLength = normalizedRange.Length;
+            // Используем длину нормализованного текста для проверки границ
+            int maxLength = normalizedCode.Length;
             int rangeStart = range.Start;
 
-            // Если тексты не совпадают, выводим предупреждение, но продолжаем работу
-            if (normalizedCode != normalizedRange)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"Предупреждение: текст Range не соответствует originalCode. Range length: {normalizedRange.Length}, Code length: {normalizedCode.Length}");
-                System.Diagnostics.Debug.WriteLine($"Range text (first 50 chars): {normalizedRange.Substring(0, Math.Min(50, normalizedRange.Length))}");
-                System.Diagnostics.Debug.WriteLine($"Code text (first 50 chars): {normalizedCode.Substring(0, Math.Min(50, normalizedCode.Length))}");
-            }
-
+            // ВАЖНО: Теперь токены парсятся из normalizedCode, поэтому позиции должны точно совпадать
+            // Но нужно учитывать, что в Word реальные позиции могут отличаться из-за \r\n vs \n
+            // Создаем маппинг позиций между normalizedCode и реальным Range
+            
             // Применяем форматирование к каждому токену
             foreach (var token in tokens)
             {
-                // Проверяем границы токена относительно originalCode
+                // Проверяем границы токена относительно normalizedCode
                 if (token.StartPosition < 0 || 
                     token.EndPosition <= token.StartPosition ||
                     token.StartPosition >= maxLength ||
@@ -320,10 +308,15 @@ namespace WordMarkdownAddIn.Services
 
                 try
                 {
+                    // Вычисляем позиции в реальном тексте Word Range
+                    // Нужно учесть, что в Word \r\n занимает 2 символа, а в normalizedCode \n - 1 символ
+                    // Используем маппинг позиций
+                    int tokenStartInWord = ConvertNormalizedPositionToWordPosition(rangeText, token.StartPosition);
+                    int tokenEndInWord = ConvertNormalizedPositionToWordPosition(rangeText, token.EndPosition);
+                    
                     // Вычисляем абсолютные позиции в документе
-                    // Позиции токенов считаются относительно начала originalCode
-                    int tokenStart = rangeStart + token.StartPosition;
-                    int tokenEnd = rangeStart + token.EndPosition;
+                    int tokenStart = rangeStart + tokenStartInWord;
+                    int tokenEnd = rangeStart + tokenEndInWord;
 
                     // Проверяем, что позиции в пределах Range
                     if (tokenStart < rangeStart || tokenEnd > range.End)
@@ -337,22 +330,11 @@ namespace WordMarkdownAddIn.Services
                     Word.Range tokenRange = range.Duplicate;
                     tokenRange.SetRange(tokenStart, tokenEnd);
 
-                    // Проверяем, что текст токена совпадает с ожидаемым
-                    string tokenTextInRange = tokenRange.Text.TrimEnd('\r', '\n', '\a');
-                    if (tokenTextInRange != token.Text)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"Предупреждение: текст токена не совпадает. Ожидалось: '{token.Text}', получено: '{tokenTextInRange}'");
-                        // Продолжаем работу, так как это может быть из-за форматирования Word
-                    }
-
                     // Применяем цвет в зависимости от типа токена
                     // Пропускаем токены с Default типом, чтобы не перезаписывать форматирование
                     if (token.Type != TokenType.Default && TokenColors.ContainsKey(token.Type))
                     {
                         tokenRange.Font.Color = TokenColors[token.Type];
-                        System.Diagnostics.Debug.WriteLine(
-                            $"Применен цвет {TokenColors[token.Type]} к токену '{token.Text}' типа {token.Type}");
                     }
 
                     // Дополнительное форматирование для ключевых слов и встроенных функций
@@ -368,6 +350,47 @@ namespace WordMarkdownAddIn.Services
                         $"Ошибка форматирования токена [{token.StartPosition}-{token.EndPosition}]: {ex.Message}");
                 }
             }
+        }
+
+        /// <summary>
+        /// Преобразует позицию из нормализованного текста (где \n = 1 символ) в позицию в реальном тексте Word (где \r\n = 2 символа)
+        /// </summary>
+        /// <param name="wordText">Реальный текст из Word Range (с \r\n)</param>
+        /// <param name="normalizedPosition">Позиция в нормализованном тексте (где все переносы = \n)</param>
+        /// <returns>Позиция в реальном тексте Word</returns>
+        private static int ConvertNormalizedPositionToWordPosition(string wordText, int normalizedPosition)
+        {
+            if (string.IsNullOrEmpty(wordText) || normalizedPosition < 0)
+                return normalizedPosition;
+
+            int wordPosition = 0;
+            int normalizedIndex = 0;
+            
+            // Проходим по тексту Word и считаем, сколько символов нужно для достижения normalizedPosition
+            for (int i = 0; i < wordText.Length && normalizedIndex < normalizedPosition; i++)
+            {
+                if (wordText[i] == '\r' && i + 1 < wordText.Length && wordText[i + 1] == '\n')
+                {
+                    // Это \r\n - в нормализованном тексте это один символ \n
+                    normalizedIndex++;
+                    wordPosition += 2; // В Word это 2 символа
+                    i++; // Пропускаем \n
+                }
+                else if (wordText[i] == '\r' || wordText[i] == '\n')
+                {
+                    // Одиночный \r или \n - в нормализованном тексте это один символ \n
+                    normalizedIndex++;
+                    wordPosition++;
+                }
+                else
+                {
+                    // Обычный символ - в обоих текстах это один символ
+                    normalizedIndex++;
+                    wordPosition++;
+                }
+            }
+            
+            return wordPosition;
         }
 
         /// <summary>
@@ -394,43 +417,60 @@ namespace WordMarkdownAddIn.Services
         }
 
         /// <summary>
-        /// Применяет подсветку синтаксиса к блоку кода в Word документе
+        /// Применяет подсветку синтаксиса к блоку кода в Word документе.
+        /// Токены парсятся из реального текста Word Range, что гарантирует точное соответствие позиций.
         /// </summary>
         /// <param name="range">Диапазон текста с кодом в Word документе</param>
-        /// <param name="code">Текст кода для парсинга</param>
         /// <param name="language">Язык программирования (python, csharp, java, javascript, 1c)</param>
-        public static void HighlightCodeBlock(Word.Range range, string code, string language = "python")
+        public static void HighlightCodeBlock(Word.Range range, string language = "python")
         {
-            if (range == null || string.IsNullOrEmpty(code))
+            if (range == null)
             {
-                System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: range или code пусты");
+                System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: range пуст");
                 return;
             }
 
             try
             {
-                // Нормализуем язык
+                // 1. Получаем реальный текст из Word Range
+                string rangeText = range.Text;
+                
+                // Убираем символ конца параграфа из rangeText
+                string normalizedRangeText = rangeText.TrimEnd('\r', '\n', '\a');
+                
+                // Нормализуем текст так же, как originalCode (приводим все переносы строк к \n)
+                string normalizedCode = normalizedRangeText.Replace("\r\n", "\n").Replace("\r", "\n");
+                
+                if (string.IsNullOrEmpty(normalizedCode))
+                {
+                    System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: текст в Range пуст");
+                    return;
+                }
+
+                // 2. Нормализуем язык
                 string normalizedLanguage = (language ?? "").ToLower().Trim();
                 if (string.IsNullOrEmpty(normalizedLanguage))
                 {
                     normalizedLanguage = "python";
                 }
 
-                System.Diagnostics.Debug.WriteLine($"HighlightCodeBlock: начинаем подсветку. Язык: '{normalizedLanguage}', Длина кода: {code.Length}");
+                System.Diagnostics.Debug.WriteLine($"HighlightCodeBlock: начинаем подсветку. Язык: '{normalizedLanguage}', Длина кода: {normalizedCode.Length}");
                 
-                // 1. Парсим код на токены
-                List<Token> tokens = ParseCode(code, normalizedLanguage);
+                // 3. Парсим токены ИЗ РЕАЛЬНОГО ТЕКСТА WORD (не из originalCode)
+                // Это гарантирует, что позиции токенов точно соответствуют позициям в Range
+                List<Token> tokens = ParseCode(normalizedCode, normalizedLanguage);
                 
                 System.Diagnostics.Debug.WriteLine($"HighlightCodeBlock: найдено токенов: {tokens.Count}");
                 
                 if (tokens.Count == 0)
                 {
-                    System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: токены не найдены. Проверьте, поддерживается ли язык.");
+                    System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: токены не найдены. Проверьте язык и паттерны.");
                     return;
                 }
                 
-                // 2. Применяем форматирование к Range
-                ApplyHighlightingToWordRange(range, tokens, code);
+                // 4. Применяем форматирование к Range
+                // Теперь токены парсятся из того же текста, к которому применяются
+                ApplyHighlightingToWordRange(range, tokens, normalizedCode);
                 
                 System.Diagnostics.Debug.WriteLine("HighlightCodeBlock: подсветка применена успешно");
             }
