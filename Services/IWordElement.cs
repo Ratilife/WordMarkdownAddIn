@@ -690,7 +690,7 @@ namespace WordMarkdownAddIn.Services
             if (string.IsNullOrEmpty(Code))
                 return;
 
-            try
+            /*try
             {
                 // 1. Создаем новый параграф для блока кода
                 var codeParagraph = doc.Content.Paragraphs.Add();
@@ -756,6 +756,62 @@ namespace WordMarkdownAddIn.Services
             {
                 // Обработка ошибок - выводим в отладочную консоль
                 // В реальном приложении можно использовать логирование
+                System.Diagnostics.Debug.WriteLine($"Ошибка при вставке блока кода: {ex.Message}");
+            }*/
+
+            try
+            {
+                // 1.Сохраняем начальную позицию
+                int startPos = doc.Content.End - 1;
+
+                // 2.Вставляем код через InsertAfter
+                var insertRange = doc.Range(startPos);
+                insertRange.InsertAfter(Code);
+
+                // 3.Создаем Range для всего вставленного кода
+                int endPos = doc.Content.End - 1;
+                //Исключаем символ конца параграфа, если он есть
+                if (endPos > startPos && doc.Range(endPos - 1, endPos).Text == "\r")
+                {
+                    endPos--;
+                }
+                var codeRange = doc.Range(startPos,endPos);
+
+                // 4. Применяем форматирование к codeRange
+                codeRange.Font.Name = "Consolas";
+                codeRange.Font.Size = 10;
+                codeRange.Shading.BackgroundPatternColorIndex = (WdColorIndex)WdColor.wdColorGray25;
+
+                // 5. ПРИМЕНЯЕМ СТИЛЬ ПЕРЕД ПОДСВЕТКОЙ, чтобы не перезаписать цвета
+                // Применяем стиль "Normal" для базового форматирования
+                //codeRange.set_Style("Normal");
+
+                // Добавляем отступы для визуального выделения
+                codeRange.ParagraphFormat.LeftIndent = 18; // 0.25 дюйма
+                codeRange.ParagraphFormat.RightIndent = 18;
+
+                // Добавляем отступ сверху и снизу
+                codeRange.ParagraphFormat.SpaceBefore = 6;
+                codeRange.ParagraphFormat.SpaceAfter = 6;
+
+                // 8. ПРИМЕНЯЕМ ПОДСВЕТКУ СИНТАКСИСА ПОСЛЕ применения стиля и форматирования
+                // Нормализуем язык (приводим к нижнему регистру)
+                string normalizedLanguage = (Language ?? "").ToLower().Trim();
+                if (string.IsNullOrEmpty(normalizedLanguage))
+                {
+                    normalizedLanguage = "python"; // Язык по умолчанию
+                }
+
+                // Применяем подсветку синтаксиса к вставленному коду
+                // Это должно быть последним, чтобы цвета не были перезаписаны
+                SyntaxHighlighter.HighlightCodeBlock(codeRange, Code, normalizedLanguage);
+
+                // 6. Добавляем пустой параграф после кода
+                doc.Content.Paragraphs.Add();
+
+            }
+            catch (Exception ex) 
+            {
                 System.Diagnostics.Debug.WriteLine($"Ошибка при вставке блока кода: {ex.Message}");
             }
         }
