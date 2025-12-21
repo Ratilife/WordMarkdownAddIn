@@ -370,8 +370,8 @@ namespace WordMarkdownAddIn.Services
                     var content = ExtractFormattedContent(para.Range);
                     // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
                     elements.Add(new ElementWithPosition 
-                    { 
-                        Element = new WordTitle(text, content), 
+                    {
+                        Element = new WordTitle(text, content, 1),  // Title обычно соответствует уровню 1
                         Position = paragraphPosition 
                     });
                 }

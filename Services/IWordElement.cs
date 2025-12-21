@@ -627,11 +627,28 @@ namespace WordMarkdownAddIn.Services
         public string ElementType => "Title";
         public string Text { get; set; }
         public WordFormattedText Content { get; set; }
+        public int Level { get; set; }
 
-        public WordTitle(string text, WordFormattedText content)
+
+        public WordTitle(string text, WordFormattedText content, int level)
         {
             Text = text;
             Content = content;
+            Level = level;
+        }
+
+        private float GetFontSizeForLevel(int level)
+        {
+            switch (level)
+            {
+                case 1: return 24f;
+                case 2: return 18f;
+                case 3: return 14f;
+                case 4: return 12f;
+                case 5: return 11f;
+                case 6: return 10f;
+                default: return 12f; // значение по умолчанию
+            }
         }
 
         public string ToMarkdown()
@@ -650,8 +667,9 @@ namespace WordMarkdownAddIn.Services
             if (string.IsNullOrEmpty(titleText))
                 return "";
 
-            // Заголовок обычно представляется как заголовок уровня 1
-            return $"# {titleText}";
+            // Генерируем нужное количество символов # на основе Level
+            string hashes = new string('#', Level);
+            return $"{hashes} {titleText}";
         }
 
         public void ApplyToWord(Document doc)
@@ -663,7 +681,6 @@ namespace WordMarkdownAddIn.Services
             var paragraph = doc.Content.Paragraphs.Add();
 
             // 2. Получаем текст заголовка
-            //string titleText = "";
             if (Content != null)
             {
                 Content.ApplyToWord(doc, paragraph.Range);
@@ -673,17 +690,49 @@ namespace WordMarkdownAddIn.Services
                 paragraph.Range.Text = Text;
             }
 
-            // 3. Применяем стиль заголовка уровня 1
+            // 3. Устанавливаем размер шрифта на основе уровня
+            float fontSize = GetFontSizeForLevel(Level);
+            paragraph.Range.Font.Size = fontSize;
+
+            // 4. Делаем текст жирным
+            paragraph.Range.Font.Bold = -1;
+
+            // 5. Применяем стиль заголовка соответствующего уровня
             try
             {
-                paragraph.Range.set_Style("Heading 1");
+                WdBuiltinStyle headingStyle;
+                switch (Level)
+                {
+                    case 1:
+                        headingStyle = WdBuiltinStyle.wdStyleHeading1;
+                        break;
+                    case 2:
+                        headingStyle = WdBuiltinStyle.wdStyleHeading2;
+                        break;
+                    case 3:
+                        headingStyle = WdBuiltinStyle.wdStyleHeading3;
+                        break;
+                    case 4:
+                        headingStyle = WdBuiltinStyle.wdStyleHeading4;
+                        break;
+                    case 5:
+                        headingStyle = WdBuiltinStyle.wdStyleHeading5;
+                        break;
+                    case 6:
+                        headingStyle = WdBuiltinStyle.wdStyleHeading6;
+                        break;
+                    default:
+                        headingStyle = WdBuiltinStyle.wdStyleNormal;
+                        break;
+                }
+                paragraph.Range.set_Style(headingStyle);
             }
             catch
             {
-                paragraph.Range.set_Style("Normal");
+                paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
             }
 
-            // 4. Добавляем перенос строки
+            // 6. Добавляем перенос строки
             paragraph.Range.InsertParagraphAfter();
         }
     }

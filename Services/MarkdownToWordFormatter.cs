@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using System.Security.Policy;
+using System.Security.Cryptography.X509Certificates;
 
 namespace WordMarkdownAddIn.Services
 {
@@ -189,17 +190,13 @@ namespace WordMarkdownAddIn.Services
             try
             {
                 if (heading == null || _activeDoc == null)
-                return null;
+                    return null;
 
-            
                 //1. Извлекаем текст с форматированием
                 var formattedText = ConvertInlineToWordFormattedText(heading.Inline);
 
-                // 2. Определяем стиль заголовка
-                string styleName = $"Heading {heading.Level}";
-
-                // 3. Создаем WordParagraph
-                return new WordParagraph(styleName, formattedText);
+                // 2. Создаем WordTitle с уровнем заголовка
+                return new WordTitle("", formattedText, heading.Level);
             }
             catch (Exception ex)
             {
