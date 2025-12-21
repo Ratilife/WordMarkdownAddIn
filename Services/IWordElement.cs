@@ -681,13 +681,18 @@ namespace WordMarkdownAddIn.Services
             var paragraph = doc.Content.Paragraphs.Add();
 
             // 2. Получаем текст заголовка
-            if (Content != null)
+            if (Content != null && Content.Runs.Count > 0)
             {
                 Content.ApplyToWord(doc, paragraph.Range);
             }
             else if (!string.IsNullOrEmpty(Text))
             {
                 paragraph.Range.Text = Text;
+            }
+            else if (Content != null && Content.Runs.Count == 0)
+            {
+                // Если Content пустой, но не null, вставляем пустую строку
+                paragraph.Range.Text = "";
             }
 
             // 3. Устанавливаем размер шрифта на основе уровня
