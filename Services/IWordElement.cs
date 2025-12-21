@@ -379,11 +379,21 @@ namespace WordMarkdownAddIn.Services
     {
         public string ElementType => "Paragraph";
         public string StyleName { get; set; } = "Normal"; // для заголовков: Heading 1, Normal и т.д.
+        public WdBuiltinStyle? BuiltinStyle { get; set; } = null;
         public WordFormattedText Content { get; set; } = new WordFormattedText();
 
+        public WordParagraph(WdBuiltinStyle builtinStyle, WordFormattedText content)
+        {
+            BuiltinStyle = builtinStyle;
+            StyleName = null; // Не используем строковое имя
+            Content = content;
+        }
+
+        // Конструктор для обратной совместимости - принимает строковое имя стиля
         public WordParagraph(string styleName, WordFormattedText content)
         {
             StyleName = styleName;
+            BuiltinStyle = null; // Не используем встроенную константу
             Content = content;
         }
 
@@ -392,12 +402,33 @@ namespace WordMarkdownAddIn.Services
         {
             get
             {
-                if (StyleName.StartsWith("Heading"))
+                // Сначала проверяем встроенную константу
+                if (BuiltinStyle.HasValue)
                 {
-                    string levelStr = StyleName.Substring("Heading".Length).Trim();
-                    if (int.TryParse(levelStr, out int level))
-                        return level;
+                    WdBuiltinStyle style = BuiltinStyle.Value;
+                    if (style == WdBuiltinStyle.wdStyleHeading1) return 1;
+                    if (style == WdBuiltinStyle.wdStyleHeading2) return 2;
+                    if (style == WdBuiltinStyle.wdStyleHeading3) return 3;
+                    if (style == WdBuiltinStyle.wdStyleHeading4) return 4;
+                    if (style == WdBuiltinStyle.wdStyleHeading5) return 5;
+                    if (style == WdBuiltinStyle.wdStyleHeading6) return 6;
                 }
+
+                // Fallback: проверяем строковое имя (для обратной совместимости)
+                if (!string.IsNullOrEmpty(StyleName))
+                {
+                    // Поддержка английских и русских названий
+                    if (StyleName.StartsWith("Heading") || StyleName.StartsWith("Заголовок"))
+                    {
+                        string levelStr = StyleName
+                            .Replace("Heading", "")
+                            .Replace("Заголовок", "")
+                            .Trim();
+                        if (int.TryParse(levelStr, out int level))
+                            return level;
+                    }
+                }
+
                 return 0; // не заголовок
             }
         }
@@ -435,12 +466,25 @@ namespace WordMarkdownAddIn.Services
             // 2. Применяем стиль (Heading 1, Normal и т.д.)
             try
             {
-                paragraph.Range.set_Style(StyleName);
+                if (BuiltinStyle.HasValue)
+                {
+                    // Используем встроенную константу - автоматически локализуется
+                    paragraph.Range.set_Style(BuiltinStyle.Value);
+                }
+                else if (!string.IsNullOrEmpty(StyleName))
+                {
+                    // Fallback на строковое имя (для обратной совместимости)
+                    paragraph.Range.set_Style(StyleName);
+                }
+                else
+                {
+                    paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
+                }
             }
             catch
             {
                 // Если стиль не существует, используем Normal
-                paragraph.Range.set_Style("Normal");
+                paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
             }
 
             // Очищаем символ конца параграфа перед вставкой текста
