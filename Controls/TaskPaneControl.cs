@@ -153,11 +153,15 @@ namespace WordMarkdownAddIn.Controls
                                                                                                         // Convert.ToBase64String() - кодирует байты в строку Base64
                                                                                                         // Пример: <p>Hello</p> → "PHA+SGVsbG88L3A+"
                 System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Отправка HTML длиной {html.Length} символов, Base64 длиной {b64.Length}");
-                coreWebView2.ExecuteScriptAsync($"window.renderHtml(base64ToUtf8('{b64}'));void(0);");  // Выполнение JavaScript кода
-                                                                                                        // ExecuteScriptAsync() - асинхронно выполняет JavaScript код в WebView2
-                                                                                                        // $"..." - строковая интерполяция C# для подстановки переменных
+                // Используем JSON для безопасной передачи данных - это избегает проблем с XML/CDATA
+                // Простая JSON-сериализация строки (экранирование кавычек и специальных символов)
+                var jsonB64 = "\"" + b64.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
+                // Передаем Base64 как JSON строку, затем парсим на стороне JavaScript
+                var script = $"window.renderHtml(base64ToUtf8(JSON.parse({jsonB64})));void(0);";
+                coreWebView2.ExecuteScriptAsync(script);  // Выполнение JavaScript кода
+                                                                                                        // JSON.parse() безопасно парсит JSON строку, избегая проблем с XML/CDATA
                                                                                                         // window.renderHtml() - вызов JavaScript функции из C#
-                                                                                                        // base64ToUtf8('{b64}') - правильное декодирование Base64 → UTF-8
+                                                                                                        // base64ToUtf8() - правильное декодирование Base64 → UTF-8
                                                                                                         // void(0); - предотвращает возврат значения (оптимизация)
             }
             catch (InvalidCastException ex)
