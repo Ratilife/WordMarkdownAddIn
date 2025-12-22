@@ -39,8 +39,7 @@ namespace WordMarkdownAddIn.Controls
                                                                                                         //Без этой строки _webView.CoreWebView2 будет null          
             
             _coreReady = true;                                                                          //Разрешает выполнение методов, которые работают с WebView2
-            _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;                //Подписывается на событие получения сообщений из JavaScript    
-            _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
+            _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;                //Подписывается на событие получения сообщений из JavaScript
             _webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
             _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
@@ -73,11 +72,21 @@ namespace WordMarkdownAddIn.Controls
             try 
             { 
                 var json = e.TryGetWebMessageAsString();                                                //  извлекает текст сообщения из JS формат: "тип|данныеВBase64"
-                if (string.IsNullOrEmpty(json)) return;                                                 // Если сообщение пустое или null - выходим из метода
+                System.Diagnostics.Debug.WriteLine($"[C#] Получено сообщение: {json?.Substring(0, Math.Min(100, json?.Length ?? 0))}...");
+                if (string.IsNullOrEmpty(json))
+                {
+                    System.Diagnostics.Debug.WriteLine("[C#] Сообщение пустое или null");
+                    return;                                                 // Если сообщение пустое или null - выходим из метода
+                }
                 var parts = json.Split(new[] { '|' }, 2);                                               // Split - разделяет строку по символу | на 2 части
                                                                                                         // Пример: "mdChanged|SGVsbG8=" → ["mdChanged", "SGVsbG8="]
-                if (parts.Length != 2) return;                                                          // Если сообщение не соответствует формату - игнорируем
+                if (parts.Length != 2)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[C#] Неверный формат сообщения, parts.Length={parts.Length}");
+                    return;                                                          // Если сообщение не соответствует формату - игнорируем
+                }
                 var type = parts[0];                                                                    // тип сообщения (например: "mdChanged")
+                System.Diagnostics.Debug.WriteLine($"[C#] Тип сообщения: {type}");
                 var payload = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1]));              // декодированные данные из Base64
                                                                                                         // Convert.FromBase64String() - преобразует Base64 в байты
                                                                                                         // Encoding.UTF8.GetString() - преобразует байты в строку UTF-8
@@ -86,6 +95,7 @@ namespace WordMarkdownAddIn.Controls
                 {
                     _latestMarkdown = payload;                                                          // Сохранение - обновление кэша
                     var html = _renderer.RenderoHtml(payload);                                          // Конвертация - Markdown → HTML
+                    System.Diagnostics.Debug.WriteLine($"[C#] Получен markdown длиной {payload.Length}, сгенерирован HTML длиной {html.Length}");
                     PostRenderHtml(html);                                                               // Отправка - показ HTML в preview
                 }
                 
@@ -102,7 +112,11 @@ namespace WordMarkdownAddIn.Controls
                 }
 
             }
-            catch {/* ignore malformed messages */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[C#] Ошибка обработки сообщения: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[C#] Stack trace: {ex.StackTrace}");
+            }
         }
 
 
@@ -120,16 +134,25 @@ namespace WordMarkdownAddIn.Controls
         /// </remarks>
         private void PostRenderHtml(string html) 
         {
-            if (!_coreReady || _webView == null) return;                                                // Проверка готовности WebView2
+            if (!_coreReady || _webView == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[PostRenderHtml] WebView2 не готов");
+                return;                                                // Проверка готовности WebView2
+            }
             try
             {
                 var coreWebView2 = _webView.CoreWebView2;
-                if (coreWebView2 == null) return;
+                if (coreWebView2 == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[PostRenderHtml] CoreWebView2 равен null");
+                    return;
+                }
                 
                 var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(html));                         // Кодирование HTML в Base64
                                                                                                         // Encoding.UTF8.GetBytes(html) - преобразует строку HTML в байты UTF-8
                                                                                                         // Convert.ToBase64String() - кодирует байты в строку Base64
                                                                                                         // Пример: <p>Hello</p> → "PHA+SGVsbG88L3A+"
+                System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Отправка HTML длиной {html.Length} символов, Base64 длиной {b64.Length}");
                 coreWebView2.ExecuteScriptAsync($"window.renderHtml(base64ToUtf8('{b64}'));void(0);");  // Выполнение JavaScript кода
                                                                                                         // ExecuteScriptAsync() - асинхронно выполняет JavaScript код в WebView2
                                                                                                         // $"..." - строковая интерполяция C# для подстановки переменных
@@ -137,14 +160,16 @@ namespace WordMarkdownAddIn.Controls
                                                                                                         // base64ToUtf8('{b64}') - правильное декодирование Base64 → UTF-8
                                                                                                         // void(0); - предотвращает возврат значения (оптимизация)
             }
-            catch (InvalidCastException)
+            catch (InvalidCastException ex)
             {
                 // WebView2 еще не готов, игнорируем
+                System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] InvalidCastException: {ex.Message}");
                 return;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Другие ошибки тоже игнорируем
+                System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Exception: {ex.Message}");
                 return;
             }
         }
@@ -961,14 +986,20 @@ namespace WordMarkdownAddIn.Controls
                             return btoa(unescape(encodeURIComponent(str || '')));
                         }
                         const b64 = utf8ToBase64(text || '');
+                        console.log('[JS] postToHost: type=' + type + ', text length=' + (text || '').length + ', b64 length=' + b64.length);
                         if (window.chrome && window.chrome.webview) {
                             window.chrome.webview.postMessage(type + '|' + b64);
+                            console.log('[JS] Сообщение отправлено через chrome.webview.postMessage');
                         }
                         else if (window.external && typeof window.external.notify === 'function') {
                             window.external.notify(type + '|' + b64);
+                            console.log('[JS] Сообщение отправлено через window.external.notify');
+                        }
+                        else {
+                            console.error('[JS] Не найден способ отправки сообщения!');
                         }
                     } catch(e) { 
-                        console.error('Ошибка отправки:', e); 
+                        console.error('[JS] Ошибка отправки:', e); 
                     }
                 }
 
@@ -982,6 +1013,7 @@ namespace WordMarkdownAddIn.Controls
                 }
 
                 function notifyChange() { 
+                    console.log('[JS] notifyChange вызван, длина markdown:', editor.value.length);
                     postToHost('mdChanged', editor.value); 
                 }
 
@@ -1030,9 +1062,10 @@ namespace WordMarkdownAddIn.Controls
                 // Функция обновления отображения в зависимости от режима
                 function updatePreviewDisplay() {
                     try {
+                        console.log('[JS] updatePreviewDisplay вызван, rawHtml length:', (rawHtml || '').length);
                         // Проверяем, что preview существует
                         if (!preview) {
-                            console.error('preview элемент не найден');
+                            console.error('[JS] preview элемент не найден');
                             return;
                         }
                         
@@ -1041,6 +1074,7 @@ namespace WordMarkdownAddIn.Controls
                         
                         // Если HTML пустой, просто очищаем preview
                         if (!htmlContent.trim()) {
+                            console.log('[JS] HTML пустой, очищаем preview');
                             preview.innerHTML = '';
                             return;
                         }
@@ -1049,6 +1083,7 @@ namespace WordMarkdownAddIn.Controls
                             ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] 
                         });
                         preview.innerHTML = clean;
+                        console.log('[JS] preview.innerHTML обновлен, длина:', clean.length);
                         
                         // Преобразовать блоки кода mermaid в divs
                         const mermaidBlocks = preview.querySelectorAll('pre code.language-mermaid');
@@ -1070,7 +1105,7 @@ namespace WordMarkdownAddIn.Controls
                             MathJax.typesetPromise([preview]).catch(err => console.error(err));
                         }
                     } catch(e) {
-                        console.error('Ошибка в updatePreviewDisplay:', e);
+                        console.error('[JS] Ошибка в updatePreviewDisplay:', e);
                     }
                 }
                 
@@ -1110,13 +1145,15 @@ namespace WordMarkdownAddIn.Controls
                 
                 window.renderHtml = function(html) {
                     try {
+                        console.log('[JS] renderHtml вызван, длина HTML:', (html || '').length);
                         // Сохраняем исходный HTML
                         rawHtml = html || '';
                         
                         // Обновляем отображение в зависимости от текущего режима
                         updatePreviewDisplay();
+                        console.log('[JS] renderHtml завершен, preview обновлен');
                     } catch(e) { 
-                        console.error('Ошибка рендеринга:', e); 
+                        console.error('[JS] Ошибка рендеринга:', e); 
                     }
                 }
 
