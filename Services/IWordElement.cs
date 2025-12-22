@@ -96,11 +96,97 @@ namespace WordMarkdownAddIn.Services
                 // 1) Запоминаем позицию начала вставки
                 int start = range.End;
 
+                // Проверяем, находится ли Range внутри таблицы
+                bool isInTable = false;
+                try
+                {
+                    isInTable = range.Information[WdInformation.wdWithInTable];
+                }
+                catch
+                {
+                    // Если проверка не удалась, считаем что не в таблице
+                    isInTable = false;
+                }
+
+                // Очищаем форматирование списка перед вставкой текста (только если НЕ в таблице)
+                if (!isInTable)
+                {
+                    try
+                    {
+                        range.ListFormat.RemoveNumbers();
+                    }
+                    catch { } // Игнорируем ошибки
+                }
+
                 // 2) Вставляем текст в конец текущего range
-                range.InsertAfter(run.Text);
+                int end;
+                if (isInTable)
+                {
+                    // Для ячеек таблицы используем безопасный метод вставки
+                    try
+                    {
+                        // Получаем текущий текст без маркера конца ячейки
+                        int rangeStart = range.Start;
+                        int rangeEnd = range.End;
+                        
+                        // Создаем Range без маркера конца ячейки
+                        if (rangeEnd > rangeStart)
+                        {
+                            rangeEnd--; // Исключаем маркер
+                        }
+                        
+                        if (rangeEnd > rangeStart)
+                        {
+                            Range safeRange = doc.Range(rangeStart, rangeEnd);
+                            string currentText = safeRange.Text ?? "";
+                            safeRange.Text = currentText + run.Text;
+                            end = safeRange.End;
+                            // Обновляем исходный range
+                            range.SetRange(safeRange.Start, safeRange.End);
+                        }
+                        else
+                        {
+                            // Если ячейка пустая, создаем минимальный Range и вставляем текст
+                            try
+                            {
+                                // Создаем Range для пустой ячейки (без маркера)
+                                Range emptyRange = doc.Range(rangeStart, rangeStart);
+                                emptyRange.Text = run.Text;
+                                end = emptyRange.End;
+                                range.SetRange(emptyRange.Start, emptyRange.End);
+                            }
+                            catch
+                            {
+                                // Если не удалось, просто пропускаем
+                                end = range.End;
+                                continue;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Если все методы не работают, просто пропускаем этот run
+                        end = range.End;
+                        continue; // Пропускаем этот run
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        range.InsertAfter(run.Text);
+                        end = start + run.Text.Length;
+                    }
+                    catch
+                    {
+                        // Если InsertAfter не работает, используем прямое присваивание
+                        string currentText = range.Text ?? "";
+                        range.Text = currentText + run.Text;
+                        end = range.End;
+                    }
+                }
 
                 // 3) Получаем диапазон вставленного текста [start, end)
-                int end = start + run.Text.Length;
                 var insertedRange = doc.Range(start, end);
 
                 // 4) Применяем форматирование к вставленному диапазону
@@ -287,14 +373,46 @@ namespace WordMarkdownAddIn.Services
                     var cell = wordTable.Cell(rowIndex + 1, colIndex + 1); // Word индексация с 1
                     var cellContent = row[colIndex];
 
+                    // Создаем Range без маркера конца ячейки
+                    int cellStart = cell.Range.Start;
+                    int cellEnd = cell.Range.End;
+
+                    // Исключаем последний символ (маркер конца ячейки)
+                    if (cellEnd > cellStart)
+                    {
+                        cellEnd--; // Уменьшаем на 1, чтобы исключить маркер
+                    }
+
+                    // Создаем чистый Range без маркера конца ячейки
+                    Range cleanCellRange = doc.Range(cellStart, cellEnd);
+
+                    // Проверяем, что Range создан успешно и валиден
+                    if (cleanCellRange == null || cellEnd <= cellStart)
+                    {
+                        // Если Range невалиден, используем оригинальный cell.Range
+                        cleanCellRange = cell.Range;
+                        // Но все равно нужно исключить маркер - создаем Range вручную
+                        if (cell.Range.End > cell.Range.Start)
+                        {
+                            int safeEnd = cell.Range.End - 1;
+                            if (safeEnd > cell.Range.Start)
+                            {
+                                cleanCellRange = doc.Range(cell.Range.Start, safeEnd);
+                            }
+                            else
+                            {
+                                cleanCellRange = cell.Range; // Если ячейка пустая, используем как есть
+                            }
+                        }
+                    }
+
                     if (cellContent != null)
                     {
                         // Применяем форматированный текст к ячейке
-                        cellContent.ApplyToWord(doc, cell.Range);
+                        // Метод ApplyToWord уже правильно обрабатывает ячейки таблиц
+                        cellContent.ApplyToWord(doc, cleanCellRange);
                     }
-
-                    // Убираем символ конца параграфа из ячейки
-                    cell.Range.Text = cell.Range.Text.TrimEnd('\r', '\a');
+                    // Убираем избыточную очистку текста - метод ApplyToWord уже обрабатывает это правильно
                 }
             }
 
@@ -371,6 +489,13 @@ namespace WordMarkdownAddIn.Services
 
                 // 4. Добавляем перенос строки
                 listParagraph.Range.InsertParagraphAfter();
+                // Получаем последний параграф (который был создан через InsertParagraphAfter)
+                var lastParagraphIndex = doc.Content.Paragraphs.Count;
+                if (lastParagraphIndex > 0)
+                {
+                    var newParagraph = doc.Content.Paragraphs[lastParagraphIndex];
+                    newParagraph.Range.ListFormat.RemoveNumbers();
+                }
             }
         }
     }
@@ -489,8 +614,15 @@ namespace WordMarkdownAddIn.Services
                 paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
             }
 
+            // КРИТИЧЕСКИ ВАЖНО: Очищаем форматирование списка ПОСЛЕ применения стиля
+            // потому что стили в Word могут иметь встроенную нумерацию
+            paragraph.Range.ListFormat.RemoveNumbers();
+
             // Очищаем символ конца параграфа перед вставкой текста
             paragraph.Range.Text = "";
+
+            // Очищаем форматирование списка после очистки текста
+            paragraph.Range.ListFormat.RemoveNumbers();
 
             // 3. Применяем форматированный текст через Content
             if (Content != null && Content.Runs.Count > 0)
@@ -506,6 +638,16 @@ namespace WordMarkdownAddIn.Services
 
             // 4. Добавляем перенос строки после параграфа
             paragraph.Range.InsertParagraphAfter();
+
+            // Очищаем форматирование списка у параграфа, созданного через InsertParagraphAfter
+            // чтобы следующий элемент не наследовал нумерацию
+            var lastParagraphIndex = doc.Content.Paragraphs.Count;
+            if (lastParagraphIndex > 0)
+            {
+                var newParagraph = doc.Content.Paragraphs[lastParagraphIndex];
+                newParagraph.Range.ListFormat.RemoveNumbers();
+            }
+
         }
 
     }
@@ -585,8 +727,22 @@ namespace WordMarkdownAddIn.Services
                 quoteParagraph.Range.ParagraphFormat.LeftIndent = 36; // 0.5 дюйма
             }
 
+            // КРИТИЧЕСКИ ВАЖНО: Очищаем форматирование списка ПОСЛЕ применения стиля
+            // потому что стили в Word могут иметь встроенную нумерацию
+            quoteParagraph.Range.ListFormat.RemoveNumbers();
+
             // 4. Добавляем перенос строки
             quoteParagraph.Range.InsertParagraphAfter();
+
+            // Очищаем форматирование списка у параграфа, созданного через InsertParagraphAfter
+            // чтобы следующий элемент не наследовал нумерацию
+            var lastParagraphIndex = doc.Content.Paragraphs.Count;
+            if (lastParagraphIndex > 0)
+            {
+                var newParagraph = doc.Content.Paragraphs[lastParagraphIndex];
+                newParagraph.Range.ListFormat.RemoveNumbers();
+            }
+
         }
 
     }
@@ -742,10 +898,26 @@ namespace WordMarkdownAddIn.Services
             catch
             {
                 paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
+
             }
+
+            // КРИТИЧЕСКИ ВАЖНО: Очищаем форматирование списка ПОСЛЕ применения стиля
+            // потому что стили заголовков в Word могут иметь встроенную нумерацию
+            paragraph.Range.ListFormat.RemoveNumbers();
+            
 
             // 6. Добавляем перенос строки
             paragraph.Range.InsertParagraphAfter();
+
+            // Очищаем форматирование списка у параграфа, созданного через InsertParagraphAfter
+            // чтобы следующий элемент не наследовал нумерацию
+            var lastParagraphIndex = doc.Content.Paragraphs.Count;
+            if (lastParagraphIndex > 0)
+            {
+                var newParagraph = doc.Content.Paragraphs[lastParagraphIndex];
+                newParagraph.Range.ListFormat.RemoveNumbers();
+            }
+
         }
     }
 
@@ -972,6 +1144,73 @@ namespace WordMarkdownAddIn.Services
             catch (Exception ex) 
             {
                 System.Diagnostics.Debug.WriteLine($"Ошибка при вставке блока кода: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Класс для представления пустого параграфа (разделителя) в Word документе.
+    /// Используется для обработки ThematicBreak (---) в Markdown.
+    /// </summary>
+    public class WordEmptyParagraph : IWordElement
+    {
+        /// <summary>
+        /// Возвращает тип элемента - "EmptyParagraph"
+        /// </summary>
+        public string ElementType => "EmptyParagraph";
+
+        /// <summary>
+        /// Преобразует пустой параграф в строку Markdown (пустая строка)
+        /// </summary>
+        /// <returns>Пустая строка</returns>
+        public string ToMarkdown()
+        {
+            return "";
+        }
+
+        /// <summary>
+        /// Применяет пустой параграф к Word документу.
+        /// Создает пустой параграф без текста и форматирования.
+        /// </summary>
+        /// <param name="doc">Word документ, в который нужно вставить пустой параграф</param>
+        public void ApplyToWord(Document doc)
+        {
+            if (doc == null)
+                return;
+
+            // 1. Создаем новый параграф
+            var paragraph = doc.Content.Paragraphs.Add();
+
+            // 2. Отключаем форматирование списка, чтобы избежать наследования нумерации
+            paragraph.Range.ListFormat.RemoveNumbers();
+
+            // 3. Очищаем текст параграфа (делаем его пустым)
+            paragraph.Range.Text = "";
+
+            // 4. Применяем стиль Normal
+            try
+            {
+                paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
+            }
+            catch
+            {
+                // Игнорируем ошибки применения стиля
+            }
+
+            // 5. КРИТИЧЕСКИ ВАЖНО: Очищаем форматирование списка ПОСЛЕ применения стиля
+            // потому что стили в Word могут иметь встроенную нумерацию
+            paragraph.Range.ListFormat.RemoveNumbers();
+
+            // 6. Добавляем перенос строки после пустого параграфа
+            paragraph.Range.InsertParagraphAfter();
+
+            // 7. Очищаем форматирование списка у параграфа, созданного через InsertParagraphAfter
+            // чтобы следующий элемент не наследовал нумерацию
+            var lastParagraphIndex = doc.Content.Paragraphs.Count;
+            if (lastParagraphIndex > 0)
+            {
+                var newParagraph = doc.Content.Paragraphs[lastParagraphIndex];
+                newParagraph.Range.ListFormat.RemoveNumbers();
             }
         }
     }

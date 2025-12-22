@@ -509,6 +509,10 @@ namespace WordMarkdownAddIn.Services
                 {
                     return ProcessQuote(quoteBlock);
                 }
+                else if (block is ThematicBreakBlock thematicBreak)
+                {
+                    return ProcessThematicBreak(thematicBreak);
+                }
                 else if (block.GetType().Name.Contains("Table") && 
                          (block.GetType().Namespace == "Markdig.Extensions.Tables" || 
                           block.GetType().Namespace?.Contains("Markdig.Extensions") == true))
@@ -531,11 +535,46 @@ namespace WordMarkdownAddIn.Services
             }
         }
 
+        //Разделитель (ThematicBreak)
+        private IWordElement ProcessThematicBreak(ThematicBreakBlock thematicBreak)
+        {
+            if (thematicBreak == null)
+                return null;
+
+            try
+            {
+                // Создаем пустой параграф для разделителя
+                return new WordEmptyParagraph();
+            }
+            catch (Exception ex)
+            {
+                // Обработка ошибок
+                System.Diagnostics.Debug.WriteLine($"Ошибка при обработке разделителя: {ex.Message}");
+                return null;
+            }
+        }
+
         // с форматированием
         public void ApplyMarkdownToWord(string markdown) 
         {
             // 1. Парсим Markdown через Markdig
             var document = Markdown.Parse(markdown, _pipeline);
+
+            // Очищаем документ перед вставкой нового контента
+            _activeDoc.Content.Delete();
+
+            // Удаляем оставшийся пустой параграф после Delete()
+            // Word всегда оставляет один пустой параграф, его нужно удалить
+            if (_activeDoc.Content.Paragraphs.Count > 0)
+            {
+                var lastParagraph = _activeDoc.Content.Paragraphs[_activeDoc.Content.Paragraphs.Count];
+                // Проверяем, что параграф действительно пустой (только символ конца параграфа)
+                string paragraphText = lastParagraph.Range.Text.TrimEnd('\r', '\a');
+                if (string.IsNullOrEmpty(paragraphText))
+                {
+                    lastParagraph.Range.Delete();
+                }
+            }
 
             // 2. Преобразуем в коллекцию IWordElement
             var elements = new List<IWordElement>();
