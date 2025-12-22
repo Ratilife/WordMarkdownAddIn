@@ -40,10 +40,43 @@ namespace WordMarkdownAddIn.Controls
             
             _coreReady = true;                                                                          //Разрешает выполнение методов, которые работают с WebView2
             _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;                //Подписывается на событие получения сообщений из JavaScript
+            System.Diagnostics.Debug.WriteLine("[C#] ✓ Обработчик WebMessageReceived подписан");
             _webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
             _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
-            _webView.CoreWebView2.NavigateToString(BuildHtmlShell());
+            
+            // Подписываемся на событие загрузки навигации для отладки
+            _webView.CoreWebView2.NavigationCompleted += (navSender, navArgs) =>
+            {
+                System.Diagnostics.Debug.WriteLine("[C#] NavigationCompleted: HTML загружен");
+                // Проверяем, что элементы существуют
+                _webView.CoreWebView2.ExecuteScriptAsync(@"
+                    setTimeout(function() {
+                        var editor = document.getElementById('editor');
+                        var preview = document.getElementById('preview');
+                        var btnSplit = document.getElementById('btn-split');
+                        var btnMarkdown = document.getElementById('btn-markdown');
+                        var btnHtml = document.getElementById('btn-html');
+                        var viewControls = document.querySelector('.view-controls');
+                        
+                        console.log('[JS] Проверка элементов после загрузки:');
+                        console.log('  editor:', editor ? 'найден' : 'НЕ НАЙДЕН');
+                        console.log('  preview:', preview ? 'найден' : 'НЕ НАЙДЕН');
+                        console.log('  btnSplit:', btnSplit ? 'найден' : 'НЕ НАЙДЕН');
+                        console.log('  btnMarkdown:', btnMarkdown ? 'найден' : 'НЕ НАЙДЕН');
+                        console.log('  btnHtml:', btnHtml ? 'найден' : 'НЕ НАЙДЕН');
+                        console.log('  viewControls:', viewControls ? 'найден' : 'НЕ НАЙДЕН');
+                        console.log('  body.className:', document.body.className);
+                        console.log('  body.style.display:', document.body.style.display);
+                        console.log('  viewControls.style.display:', viewControls ? viewControls.style.display : 'N/A');
+                    }, 500);
+                ");
+            };
+            
+            var html = BuildHtmlShell();
+            System.Diagnostics.Debug.WriteLine($"[C#] Загрузка HTML, длина: {html.Length}");
+            _webView.CoreWebView2.NavigateToString(html);
+            System.Diagnostics.Debug.WriteLine("[C#] ✓ HTML загружен в WebView2");
         }
 
 
@@ -72,50 +105,79 @@ namespace WordMarkdownAddIn.Controls
             try 
             { 
                 var json = e.TryGetWebMessageAsString();                                                //  извлекает текст сообщения из JS формат: "тип|данныеВBase64"
-                System.Diagnostics.Debug.WriteLine($"[C#] Получено сообщение: {json?.Substring(0, Math.Min(100, json?.Length ?? 0))}...");
+                System.Diagnostics.Debug.WriteLine($"[C#] ===== WebMessageReceived вызван ===== ");
+                System.Diagnostics.Debug.WriteLine($"[C#] Получено сообщение (первые 200 символов): {json?.Substring(0, Math.Min(200, json?.Length ?? 0))}...");
+                System.Diagnostics.Debug.WriteLine($"[C#] Длина сообщения: {json?.Length ?? 0}");
+                
                 if (string.IsNullOrEmpty(json))
                 {
-                    System.Diagnostics.Debug.WriteLine("[C#] Сообщение пустое или null");
+                    System.Diagnostics.Debug.WriteLine("[C#] ✗ Сообщение пустое или null");
                     return;                                                 // Если сообщение пустое или null - выходим из метода
                 }
                 var parts = json.Split(new[] { '|' }, 2);                                               // Split - разделяет строку по символу | на 2 части
                                                                                                         // Пример: "mdChanged|SGVsbG8=" → ["mdChanged", "SGVsbG8="]
                 if (parts.Length != 2)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[C#] Неверный формат сообщения, parts.Length={parts.Length}");
+                    System.Diagnostics.Debug.WriteLine($"[C#] ✗ Неверный формат сообщения, parts.Length={parts.Length}");
+                    System.Diagnostics.Debug.WriteLine($"[C#] Полное сообщение: {json}");
                     return;                                                          // Если сообщение не соответствует формату - игнорируем
                 }
                 var type = parts[0];                                                                    // тип сообщения (например: "mdChanged")
-                System.Diagnostics.Debug.WriteLine($"[C#] Тип сообщения: {type}");
-                var payload = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1]));              // декодированные данные из Base64
+                System.Diagnostics.Debug.WriteLine($"[C#] ✓ Тип сообщения: {type}");
+                
+                try
+                {
+                    var payload = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1]));              // декодированные данные из Base64
                                                                                                         // Convert.FromBase64String() - преобразует Base64 в байты
                                                                                                         // Encoding.UTF8.GetString() - преобразует байты в строку UTF-8
-                //Обработка изменения Markdown
-                if (type == "mdChanged")                                                                // Проверка типа - если это сообщение об изменении Markdown
-                {
-                    _latestMarkdown = payload;                                                          // Сохранение - обновление кэша
-                    var html = _renderer.RenderoHtml(payload);                                          // Конвертация - Markdown → HTML
-                    System.Diagnostics.Debug.WriteLine($"[C#] Получен markdown длиной {payload.Length}, сгенерирован HTML длиной {html.Length}");
-                    PostRenderHtml(html);                                                               // Отправка - показ HTML в preview
-                }
-                
-                // Обработка изменения режима отображения
-                if (type == "viewModeChanged")
-                {
-                    // Сохраняем режим в настройках приложения
-                    try
+                    System.Diagnostics.Debug.WriteLine($"[C#] ✓ Payload декодирован, длина: {payload.Length}");
+                    
+                    //Обработка изменения Markdown
+                    if (type == "mdChanged")                                                                // Проверка типа - если это сообщение об изменении Markdown
                     {
-                        Settings.Default.ViewMode = payload;
-                        Settings.Default.Save();
+                        System.Diagnostics.Debug.WriteLine($"[C#] ===== Обработка mdChanged ===== ");
+                        _latestMarkdown = payload;                                                          // Сохранение - обновление кэша
+                        System.Diagnostics.Debug.WriteLine($"[C#] Markdown сохранен в кэш, длина: {_latestMarkdown.Length}");
+                        
+                        var html = _renderer.RenderoHtml(payload);                                          // Конвертация - Markdown → HTML
+                        System.Diagnostics.Debug.WriteLine($"[C#] ✓ Markdown конвертирован в HTML, длина: {html.Length}");
+                        System.Diagnostics.Debug.WriteLine($"[C#] HTML (первые 200 символов): {html.Substring(0, Math.Min(200, html.Length))}...");
+                        
+                        PostRenderHtml(html);                                                               // Отправка - показ HTML в preview
+                        System.Diagnostics.Debug.WriteLine($"[C#] ✓ PostRenderHtml вызван");
+                        System.Diagnostics.Debug.WriteLine($"[C#] ===== mdChanged обработан успешно ===== ");
                     }
-                    catch { /* Игнорируем ошибки сохранения настроек */ }
+                    
+                    // Обработка изменения режима отображения
+                    if (type == "viewModeChanged")
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[C#] Обработка viewModeChanged: {payload}");
+                        // Сохраняем режим в настройках приложения
+                        try
+                        {
+                            Settings.Default.ViewMode = payload;
+                            Settings.Default.Save();
+                            System.Diagnostics.Debug.WriteLine($"[C#] ✓ Режим сохранен: {payload}");
+                        }
+                        catch (Exception ex2)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[C#] ✗ Ошибка сохранения режима: {ex2.Message}");
+                        }
+                    }
+                }
+                catch (Exception decodeEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[C#] ✗ Ошибка декодирования Base64: {decodeEx.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[C#] Base64 строка (первые 100 символов): {parts[1]?.Substring(0, Math.Min(100, parts[1]?.Length ?? 0))}...");
                 }
 
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[C#] ===== ОШИБКА в WebMessageReceived ===== ");
                 System.Diagnostics.Debug.WriteLine($"[C#] Ошибка обработки сообщения: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"[C#] Stack trace: {ex.StackTrace}");
+                System.Diagnostics.Debug.WriteLine($"[C#] ===== Конец ошибки ===== ");
             }
         }
 
@@ -153,12 +215,89 @@ namespace WordMarkdownAddIn.Controls
                                                                                                         // Convert.ToBase64String() - кодирует байты в строку Base64
                                                                                                         // Пример: <p>Hello</p> → "PHA+SGVsbG88L3A+"
                 System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Отправка HTML длиной {html.Length} символов, Base64 длиной {b64.Length}");
-                // Используем JSON для безопасной передачи данных - это избегает проблем с XML/CDATA
-                // Простая JSON-сериализация строки (экранирование кавычек и специальных символов)
-                var jsonB64 = "\"" + b64.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
-                // Передаем Base64 как JSON строку, затем парсим на стороне JavaScript
-                var script = $"window.renderHtml(base64ToUtf8(JSON.parse({jsonB64})));void(0);";
-                coreWebView2.ExecuteScriptAsync(script);  // Выполнение JavaScript кода
+                
+                // Экранируем Base64 для безопасной передачи в JavaScript как строковый литерал
+                var escapedB64 = b64.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "\\r").Replace("\n", "\\n");
+                
+                var script = $@"
+                    (function() {{
+                        try {{
+                            var b64 = '{escapedB64}';
+                            
+                            // Пробуем через функции
+                            if (typeof window.renderHtml === 'function' && typeof window.base64ToUtf8 === 'function') {{
+                                var html = window.base64ToUtf8(b64);
+                                window.renderHtml(html);
+                                return 'SUCCESS: via functions';
+                            }}
+                            
+                            // Fallback: напрямую устанавливаем innerHTML
+                            var preview = document.getElementById('preview');
+                            if (preview) {{
+                                // Простое декодирование Base64
+                                var binary = atob(b64);
+                                var bytes = new Uint8Array(binary.length);
+                                for (var i = 0; i < binary.length; i++) {{
+                                    bytes[i] = binary.charCodeAt(i);
+                                }}
+                                var html = new TextDecoder('utf-8').decode(bytes);
+                                
+                                // Устанавливаем HTML напрямую
+                                if (typeof DOMPurify !== 'undefined') {{
+                                    preview.innerHTML = DOMPurify.sanitize(html, {{ ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] }});
+                                }} else {{
+                                    preview.innerHTML = html;
+                                }}
+                                return 'SUCCESS: direct';
+                            }}
+                            
+                            return 'ERROR: preview not found';
+                        }} catch(e) {{
+                            return 'ERROR: ' + e.message;
+                        }}
+                    }})();";
+                
+                // Выполняем скрипт
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Выполняем скрипт...");
+                    var task = coreWebView2.ExecuteScriptAsync(script);
+                    
+                    // Получаем результат для отладки
+                    task.ContinueWith(t =>
+                    {
+                        try
+                        {
+                            if (t.Status == TaskStatus.RanToCompletion && !t.IsFaulted && !t.IsCanceled)
+                            {
+                                var result = t.Result;
+                                var resultStr = result?.ToString() ?? "null";
+                                // Убираем кавычки из JSON строки
+                                if (resultStr.StartsWith("\"") && resultStr.EndsWith("\""))
+                                {
+                                    resultStr = resultStr.Substring(1, resultStr.Length - 2);
+                                }
+                                System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Результат: {resultStr}");
+                            }
+                            else if (t.IsFaulted)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Ошибка: {t.Exception?.GetBaseException()?.Message}");
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Статус: {t.Status}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Ошибка в ContinueWith: {ex.Message}");
+                        }
+                    }, TaskScheduler.Default);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PostRenderHtml] Исключение: {ex.Message}");
+                }
                                                                                                         // JSON.parse() безопасно парсит JSON строку, избегая проблем с XML/CDATA
                                                                                                         // window.renderHtml() - вызов JavaScript функции из C#
                                                                                                         // base64ToUtf8() - правильное декодирование Base64 → UTF-8
@@ -879,6 +1018,14 @@ namespace WordMarkdownAddIn.Controls
                         // Обновляем отображение при переключении режима
                         updatePreviewDisplay();
                         
+                        // При переключении на HTML режим, если есть текст в редакторе, обновляем HTML
+                        if (mode === 'html' && editor && editor.value && editor.value.trim()) {
+                            // Отправляем текущий Markdown для конвертации в HTML
+                            setTimeout(function() {
+                                notifyChange();
+                            }, 100);
+                        }
+                        
                         // Отладочный вывод
                         console.log('Режим переключен на:', mode);
                         console.log('Класс body:', document.body.className);
@@ -1007,20 +1154,55 @@ namespace WordMarkdownAddIn.Controls
                             return btoa(unescape(encodeURIComponent(str || '')));
                         }
                         const b64 = utf8ToBase64(text || '');
+                        const message = type + '|' + b64;
+                        console.log('[JS] ===== postToHost вызван =====');
                         console.log('[JS] postToHost: type=' + type + ', text length=' + (text || '').length + ', b64 length=' + b64.length);
-                        if (window.chrome && window.chrome.webview) {
-                            window.chrome.webview.postMessage(type + '|' + b64);
-                            console.log('[JS] Сообщение отправлено через chrome.webview.postMessage');
+                        
+                        // Пробуем разные способы отправки сообщений
+                        let sent = false;
+                        
+                        // Способ 1: window.chrome.webview.postMessage (WebView2) - основной способ
+                        if (window.chrome && window.chrome.webview && typeof window.chrome.webview.postMessage === 'function') {
+                            try {
+                                window.chrome.webview.postMessage(message);
+                                console.log('[JS] ✓ Сообщение отправлено через chrome.webview.postMessage');
+                                sent = true;
+                            } catch(e) {
+                                console.error('[JS] ✗ Ошибка при отправке через chrome.webview.postMessage:', e);
+                                console.error('[JS] Ошибка детали:', e.message, e.stack);
+                            }
+                        } else {
+                            console.warn('[JS] window.chrome.webview.postMessage недоступен');
+                            console.log('[JS] window.chrome:', window.chrome);
+                            console.log('[JS] window.chrome.webview:', window.chrome ? window.chrome.webview : 'undefined');
                         }
-                        else if (window.external && typeof window.external.notify === 'function') {
-                            window.external.notify(type + '|' + b64);
-                            console.log('[JS] Сообщение отправлено через window.external.notify');
+                        
+                        // Способ 2: window.external.notify (старый способ, для совместимости)
+                        if (!sent && window.external && typeof window.external.notify === 'function') {
+                            try {
+                                window.external.notify(message);
+                                console.log('[JS] ✓ Сообщение отправлено через window.external.notify');
+                                sent = true;
+                            } catch(e) {
+                                console.error('[JS] ✗ Ошибка при отправке через window.external.notify:', e);
+                            }
                         }
-                        else {
-                            console.error('[JS] Не найден способ отправки сообщения!');
+                        
+                        if (!sent) {
+                            console.error('[JS] ✗ Не найден способ отправки сообщения!');
+                            console.error('[JS] Проверка доступности API:');
+                            console.error('[JS]   window.chrome:', typeof window.chrome);
+                            console.error('[JS]   window.chrome.webview:', window.chrome ? typeof window.chrome.webview : 'undefined');
+                            console.error('[JS]   window.external:', typeof window.external);
+                        } else {
+                            console.log('[JS] ===== postToHost завершен успешно =====');
                         }
                     } catch(e) { 
+                        console.error('[JS] ===== ОШИБКА в postToHost =====');
                         console.error('[JS] Ошибка отправки:', e); 
+                        console.error('[JS] Сообщение:', e.message);
+                        console.error('[JS] Stack trace:', e.stack);
+                        console.error('[JS] ===== Конец ошибки =====');
                     }
                 }
 
@@ -1036,17 +1218,64 @@ namespace WordMarkdownAddIn.Controls
                 function notifyChange() { 
                     if (!editor) {
                         console.error('[JS] notifyChange: editor не инициализирован');
-                        return;
+                        // Пытаемся получить editor еще раз
+                        editor = document.getElementById('editor');
+                        if (!editor) {
+                            console.error('[JS] notifyChange: элемент editor не найден в DOM');
+                            return;
+                        }
                     }
-                    console.log('[JS] notifyChange вызван, длина markdown:', editor.value.length);
-                    postToHost('mdChanged', editor.value); 
+                    const markdownValue = editor.value || '';
+                    console.log('[JS] ===== notifyChange вызван =====');
+                    console.log('[JS] notifyChange: длина markdown:', markdownValue.length);
+                    console.log('[JS] notifyChange: содержимое markdown (первые 100 символов):', markdownValue.substring(0, 100));
+                    
+                    // Отправляем сообщение в C#
+                    postToHost('mdChanged', markdownValue);
+                    
+                    console.log('[JS] ===== notifyChange завершен =====');
                 }
 
                 // Слушаем изменения в редакторе (будет установлено после инициализации)
                 function setupEditorListeners() {
+                    if (!editor) {
+                        console.error('[JS] setupEditorListeners: editor не найден, пытаемся получить...');
+                        editor = document.getElementById('editor');
+                    }
                     if (editor) {
-                        editor.addEventListener('input', debounce(notifyChange, 120));
-                        console.log('[JS] Обработчик input установлен для editor');
+                        // Удаляем старые обработчики, если они есть
+                        // Создаем именованную функцию для обработчика, чтобы можно было удалить
+                        if (editor._notifyChangeHandler) {
+                            editor.removeEventListener('input', editor._notifyChangeHandler);
+                        }
+                        if (editor._keyupHandler) {
+                            editor.removeEventListener('keyup', editor._keyupHandler);
+                        }
+                        
+                        // Создаем обработчик с debounce
+                        const debouncedNotify = debounce(notifyChange, 120);
+                        editor._notifyChangeHandler = debouncedNotify;
+                        
+                        // Добавляем обработчик input для отслеживания изменений
+                        editor.addEventListener('input', editor._notifyChangeHandler);
+                        
+                        // Также добавляем обработчик keyup для немедленного обновления при некоторых действиях
+                        editor._keyupHandler = function() {
+                            // Вызываем notifyChange без debounce для некоторых клавиш
+                            notifyChange();
+                        };
+                        editor.addEventListener('keyup', editor._keyupHandler);
+                        
+                        console.log('[JS] Обработчики input и keyup установлены для editor');
+                        
+                        // Тестовый вызов для проверки
+                        console.log('[JS] Тестовый вызов notifyChange...');
+                        setTimeout(function() {
+                            if (editor && editor.value) {
+                                console.log('[JS] Editor имеет значение, вызываем notifyChange');
+                                notifyChange();
+                            }
+                        }, 500);
                     } else {
                         console.error('[JS] Не удалось установить обработчик input: editor не найден');
                     }
@@ -1122,28 +1351,42 @@ namespace WordMarkdownAddIn.Controls
                 // Функция обновления отображения в зависимости от режима
                 function updatePreviewDisplay() {
                     try {
-                        console.log('[JS] updatePreviewDisplay вызван, rawHtml length:', (rawHtml || '').length);
+                        console.log('[JS] updatePreviewDisplay: начало');
+                        console.log('[JS] updatePreviewDisplay: rawHtml length:', (rawHtml || '').length);
+                        
                         // Проверяем, что preview существует
                         if (!preview) {
-                            console.error('[JS] preview элемент не найден');
-                            return;
+                            console.error('[JS] updatePreviewDisplay: preview элемент не найден, пытаемся получить...');
+                            preview = document.getElementById('preview');
+                            if (!preview) {
+                                console.error('[JS] updatePreviewDisplay: preview все еще не найден!');
+                                return;
+                            }
                         }
                         
                         // Во всех режимах рендерим HTML одинаково (отформатированный контент)
                         const htmlContent = rawHtml || '';
+                        console.log('[JS] updatePreviewDisplay: htmlContent length:', htmlContent.length);
+                        console.log('[JS] updatePreviewDisplay: htmlContent (первые 100 символов):', htmlContent.substring(0, 100));
                         
                         // Если HTML пустой, просто очищаем preview
                         if (!htmlContent.trim()) {
-                            console.log('[JS] HTML пустой, очищаем preview');
+                            console.log('[JS] updatePreviewDisplay: HTML пустой, очищаем preview');
                             preview.innerHTML = '';
                             return;
                         }
                         
-                        const clean = DOMPurify.sanitize(htmlContent, { 
-                            ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] 
-                        });
-                        preview.innerHTML = clean;
-                        console.log('[JS] preview.innerHTML обновлен, длина:', clean.length);
+                        // Проверяем наличие DOMPurify
+                        if (typeof DOMPurify === 'undefined') {
+                            console.error('[JS] updatePreviewDisplay: DOMPurify не загружен! Используем прямое присваивание.');
+                            preview.innerHTML = htmlContent;
+                        } else {
+                            const clean = DOMPurify.sanitize(htmlContent, { 
+                                ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] 
+                            });
+                            preview.innerHTML = clean;
+                            console.log('[JS] updatePreviewDisplay: preview.innerHTML обновлен через DOMPurify, длина:', clean.length);
+                        }
                         
                         // Преобразовать блоки кода mermaid в divs
                         const mermaidBlocks = preview.querySelectorAll('pre code.language-mermaid');
@@ -1205,21 +1448,43 @@ namespace WordMarkdownAddIn.Controls
                 
                 window.renderHtml = function(html) {
                     try {
-                        console.log('[JS] renderHtml вызван, длина HTML:', (html || '').length);
+                        console.log('[JS] ===== renderHtml вызван =====');
+                        console.log('[JS] renderHtml: длина HTML:', (html || '').length);
+                        console.log('[JS] renderHtml: preview существует:', !!preview);
+                        console.log('[JS] renderHtml: DOMPurify существует:', typeof DOMPurify !== 'undefined');
+                        
                         if (!html) {
                             console.warn('[JS] renderHtml получил пустой HTML');
                             html = '';
                         }
+                        
+                        // Проверяем, что preview существует
+                        if (!preview) {
+                            console.error('[JS] renderHtml: preview не найден, пытаемся получить...');
+                            preview = document.getElementById('preview');
+                            if (!preview) {
+                                console.error('[JS] renderHtml: preview все еще не найден после попытки получения!');
+                                return;
+                            }
+                        }
+                        
                         // Сохраняем исходный HTML
                         rawHtml = html;
                         console.log('[JS] rawHtml сохранен, длина:', rawHtml.length);
+                        console.log('[JS] rawHtml содержимое (первые 100 символов):', rawHtml.substring(0, 100));
                         
                         // Обновляем отображение в зависимости от текущего режима
+                        console.log('[JS] Вызываем updatePreviewDisplay...');
                         updatePreviewDisplay();
-                        console.log('[JS] renderHtml завершен, preview обновлен');
+                        console.log('[JS] updatePreviewDisplay завершен');
+                        console.log('[JS] preview.innerHTML длина после обновления:', preview.innerHTML.length);
+                        console.log('[JS] ===== renderHtml завершен успешно =====');
                     } catch(e) { 
+                        console.error('[JS] ===== ОШИБКА в renderHtml =====');
                         console.error('[JS] Ошибка рендеринга:', e); 
+                        console.error('[JS] Сообщение:', e.message);
                         console.error('[JS] Stack trace:', e.stack);
+                        console.error('[JS] ===== Конец ошибки =====');
                     }
                 }
 
@@ -1227,20 +1492,40 @@ namespace WordMarkdownAddIn.Controls
                 function initializeApp() {
                     // Проверяем готовность DOM
                     if (!document.body) {
-                        console.log('DOM еще не готов, повтор через 200мс...');
+                        console.log('[JS] DOM еще не готов, повтор через 200мс...');
                         setTimeout(initializeApp, 200);
                         return;
                     }
                     
+                    console.log('[JS] DOM готов, начинаем инициализацию');
+                    
                     // Инициализируем переменные editor и preview после загрузки DOM
                     editor = document.getElementById('editor');
                     preview = document.getElementById('preview');
+                    
+                    console.log('[JS] Элементы найдены:');
+                    console.log('  editor:', editor ? 'найден' : 'НЕ НАЙДЕН');
+                    console.log('  preview:', preview ? 'найден' : 'НЕ НАЙДЕН');
+                    
+                    // Проверяем кнопки
+                    var btnSplit = document.getElementById('btn-split');
+                    var btnMarkdown = document.getElementById('btn-markdown');
+                    var btnHtml = document.getElementById('btn-html');
+                    var viewControls = document.querySelector('.view-controls');
+                    
+                    console.log('  btnSplit:', btnSplit ? 'найден' : 'НЕ НАЙДЕН');
+                    console.log('  btnMarkdown:', btnMarkdown ? 'найден' : 'НЕ НАЙДЕН');
+                    console.log('  btnHtml:', btnHtml ? 'найден' : 'НЕ НАЙДЕН');
+                    console.log('  viewControls:', viewControls ? 'найден' : 'НЕ НАЙДЕН');
                     
                     if (!editor) {
                         console.error('[JS] Элемент editor не найден!');
                     }
                     if (!preview) {
                         console.error('[JS] Элемент preview не найден!');
+                    }
+                    if (!viewControls) {
+                        console.error('[JS] Элемент view-controls не найден!');
                     }
                     
                     // Загрузка сохраненного режима из localStorage (с обработкой ошибок)
@@ -1258,20 +1543,39 @@ namespace WordMarkdownAddIn.Controls
                         savedMode = 'split';
                     }
                     
-                    // Устанавливаем режим
+                    // Устанавливаем режим (гарантируем, что preview будет виден)
+                    console.log('[JS] Устанавливаем режим:', savedMode);
                     setViewMode(savedMode);
+                    console.log('[JS] Режим установлен, класс body:', document.body.className);
 
                     // Инициализируем кнопки еще раз (на всякий случай)
                     initViewModeButtons();
                     
-                    // Финальная проверка
+                    // Финальная проверка - убеждаемся, что режим split установлен и preview виден
                     setTimeout(function() {
-                        console.log('Финальная проверка класса body:', document.body.className);
+                        console.log('[JS] Финальная проверка класса body:', document.body.className);
+                        console.log('[JS] Финальная проверка preview:', preview ? 'найден' : 'НЕ НАЙДЕН');
+                        if (preview) {
+                            console.log('[JS] preview.style.display:', preview.style.display);
+                            console.log('[JS] preview.offsetWidth:', preview.offsetWidth);
+                            console.log('[JS] preview.offsetHeight:', preview.offsetHeight);
+                        }
                         if (!document.body.className || document.body.className.indexOf('view-mode-') < 0) {
-                            console.log('Класс не установлен, устанавливаем split...');
+                            console.log('[JS] Класс не установлен, устанавливаем split...');
                             setViewMode('split');
                         }
-                    }, 300);
+                        // Принудительно показываем preview если он скрыт
+                        if (preview && preview.offsetWidth === 0) {
+                            console.log('[JS] Preview скрыт, принудительно показываем');
+                            preview.style.display = 'block';
+                            preview.style.width = '50%';
+                        }
+                        
+                        // Тестовая отправка сообщения для проверки связи JavaScript → C#
+                        console.log('[JS] ===== Тестовая отправка сообщения в C# =====');
+                        postToHost('mdChanged', editor ? (editor.value || '') : '');
+                        console.log('[JS] ===== Тестовая отправка завершена =====');
+                    }, 500);
                     
                     // Устанавливаем обработчики событий для editor
                     setupEditorListeners();
@@ -1281,14 +1585,41 @@ namespace WordMarkdownAddIn.Controls
                         // Отправляем начальное состояние markdown для конвертации в HTML
                         // Это гарантирует, что preview будет обновлен при загрузке
                         console.log('[JS] Отправка начального состояния markdown для конвертации в HTML');
-                        notifyChange();
+                        console.log('[JS] Начальное значение editor:', editor.value ? editor.value.substring(0, 50) : '(пусто)');
+                        
+                        // Проверяем, что обработчик установлен
+                        setTimeout(function() {
+                            if (editor) {
+                                // Проверяем наличие обработчика
+                                var hasInputHandler = editor._notifyChangeHandler !== undefined;
+                                console.log('[JS] Проверка обработчика input:', hasInputHandler ? 'установлен' : 'НЕ установлен');
+                                
+                                // Если обработчик не установлен, устанавливаем его снова
+                                if (!hasInputHandler) {
+                                    console.warn('[JS] Обработчик input не найден, устанавливаем заново...');
+                                    setupEditorListeners();
+                                }
+                                
+                                // Отправляем начальное состояние
+                                notifyChange();
+                            }
+                        }, 300);
                     } else {
                         console.error('[JS] Не удалось получить элемент editor для focus');
                     }
                 }
                 
                 // Запускаем инициализацию
-                setTimeout(initializeApp, 300);
+                // Используем DOMContentLoaded для гарантии готовности DOM
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        console.log('[JS] DOMContentLoaded сработал, запускаем initializeApp');
+                        setTimeout(initializeApp, 100);
+                    });
+                } else {
+                    console.log('[JS] DOM уже готов, запускаем initializeApp');
+                    setTimeout(initializeApp, 100);
+                }
 
             </script>
         </body>
@@ -1296,194 +1627,6 @@ namespace WordMarkdownAddIn.Controls
     ";
         }
 
-        private string BuildHtmlShell_Old() 
-        {
-            return @"<!DOCTYPE html>
-                <html>
-                <head>
-                    <!-- Заголовок и мета-теги -->
-                    <meta charset=\""utf-8\""/>
-                    <meta http-equiv=\""X-UA-Compatible\"" content=\""IE=edge\"" />
-                    <meta name=\""viewport\"" content=\""width=device-width, initial-scale=1\"" />
-                    <title>Markdown Editor</title>
-                        <!-- Стили -->
-                        <style>
-                             html, body { 
-                                height: 100%; 
-                                margin: 0; 
-                                font-family: Segoe UI, Arial, sans-serif; 
-                             }   
-                             .container { 
-                                display: flex; 
-                                height: 100%; 
-                             }
-                             
-                             #editor { 
-                                width: 50%; 
-                                height: 100%; 
-                                border: none; 
-                                padding: 12px; 
-                                font-family: Consolas, monospace; 
-                                font-size: 13px; 
-                                box-sizing: border-box; 
-                                outline: none; 
-                                resize: none; 
-                                border-right: 1px solid #ddd; 
-                             }
-                            
-                             #preview { 
-                                width: 50%; 
-                                height: 100%; 
-                                overflow: auto; 
-                                padding: 16px; 
-                                box-sizing: border-box; 
-                             }
-
-                             pre { 
-                                background: #f6f8fa; 
-                                padding: 10px; 
-                                overflow: auto; 
-                             }
-                             code { 
-                                font-family: Consolas, monospace; 
-                             }
-                            
-                        </style>
-                        
-                </head>
-                <body>
-                    <!-- Структура редактора -->
-                    <div class=\""container\"">
-                        <textarea id=\""editor\"" placeholder=\""Введите Markdown...""></textarea>
-                        <div id=\""preview\""></div>
-                    </div>
-                    <!-- Скрипты -->
-                    <script src=\""https://cdn.jsdelivr.net/npm/dompurify@3.1.0/dist/purify.min.js\""></script>
-                    <script src=\""https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js\""></script>
-                    <script src=\""https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js\""></script>
-                    <script>Prism.plugins.autoloader.languages_path = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/';</script>
-                    <script src=\""https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js\""></script>
-                    <script>mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });</script>
-                    <script>window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\\(', '\\\)']] }, svg: { fontCache: 'global' } };</script>
-                    <script src=\""https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js\""></script>
-                    
-                    <script>
-                        // Базовые переменные
-                        const editor = document.getElementById('editor');
-                        const preview = document.getElementById('preview');
-        
-                        // Функция для отправки сообщений в C#
-                        function postToHost(type, text) {
-                            try {
-                                const b64 = btoa(unescape(encodeURIComponent(text || '')));
-                                if (window.chrome && window.chrome.webview) {
-                                    window.chrome.webview.postMessage(type + '|' + b64);
-                                }
-                                 else if (window.chrome && window.chrome.webview) {
-                                    window.chrome.webview.postMessage(type + '|' + b64);
-                                }
-                                else if (window.external && typeof window.external.notify === 'function') {
-                                    window.external.notify(type + '|' + b64);
-                                }
-                                } catch(e) { 
-                                    console.error('Ошибка отправки:', e); 
-                                }
-                        }
-        
-                        // Уведомление об изменениях с задержкой
-                        function debounce(fn, ms) { 
-                            let t; 
-                            return function() { 
-                                clearTimeout(t); 
-                                t = setTimeout(() => fn.apply(this, arguments), ms); 
-                            } 
-                        }
-        
-                        function notifyChange() { 
-                            postToHost('mdChanged', editor.value); 
-                        }
-        
-                        // Слушаем изменения в редакторе
-                        editor.addEventListener('input', debounce(notifyChange, 120));
-
-                        // Методы для вызова из C#
-                        window.editorSetValue = function(text) { 
-                            editor.value = text || ''; 
-                            notifyChange(); 
-                        }
-                        
-                        window.editorGetValue = function() { 
-                            return editor.value || ''; 
-                        }
-
-                        window.insertAroundSelection = function(prefix, suffix) {
-                            prefix = prefix || ''; 
-                            suffix = suffix || '';
-                            const start = editor.selectionStart || 0;
-                            const end = editor.selectionEnd || 0;
-                            const val = editor.value;
-            
-                            editor.value = val.substring(0, start) + 
-                                prefix + 
-                                val.substring(start, end) + 
-                                suffix + 
-                                val.substring(end);
-            
-                            const newPos = start + prefix.length + (end - start);
-                            editor.setSelectionRange(newPos, newPos);
-                            editor.focus();
-                            notifyChange();
-                        }
-                        
-                         window.insertSnippet = function(snippet) {
-                            const pos = editor.selectionStart || 0;
-                            const val = editor.value;
-                            editor.value = val.substring(0, pos) + snippet + val.substring(pos);
-                            const newPos = pos + snippet.length;
-                            editor.setSelectionRange(newPos, newPos);
-                            editor.focus();
-                            notifyChange();
-                        }
-
-                        window.renderHtml = function(html) {
-                            try {
-                                // Базовая очистка и отображение
-                                const clean = DOMPurify.sanitize(html || '', { 
-                                ADD_ATTR: ['target', 'rel', 'class', 'style', 'id'] 
-                                });
-                                preview.innerHTML = clean;
-                                // Преобразовать блоки кода mermaid в divs
-                                const mermaidBlocks = preview.querySelectorAll('pre code.language-mermaid');
-                                mermaidBlocks.forEach(code => {
-                                    const pre = code.parentElement;
-                                    const wrapper = document.createElement('div');
-                                    wrapper.className = 'mermaid';
-                                    wrapper.textContent = code.textContent;
-                                    pre.replaceWith(wrapper);
-                                });
-                                Prism.highlightAllUnder(preview);
-                                if (window.mermaid) {
-                                    mermaid.init(undefined, preview.querySelectorAll('.mermaid'));
-                                }
-                                if (window.MathJax && MathJax.typesetPromise) {
-                                    MathJax.typesetPromise([preview]).catch(err => console.error(err));
-                                }
-                                window.addEventListener('load', function() {
-                                    editor.focus();
-                                    //notifyChange(); // Отправить начальное состояние
-                                    setTimeout(() => notifyChange(), 100);
-                                });
-
-                            } catch(e) { 
-                                console.error('Ошибка рендеринга:', e); 
-                            }
-                        }
-
-                    </script>
-                </body>
-                </html>
-            ";
-        }
-
+       
     }
 }
