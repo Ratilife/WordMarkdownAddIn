@@ -209,11 +209,28 @@ namespace WordMarkdownAddIn.Controls
                                                                                                                         // Encoding.UTF8.GetBytes() - преобразует строку в байты UTF-8
                                                                                                                         // Convert.ToBase64String() - кодирует байты в Base64 строку
                                                                                                                         // Пример: "Hello" → "SGVsbG8="    
-                coreWebView2.ExecuteScriptAsync($"window.editorSetValue(base64ToUtf8('{b64}'));void(0);");              // Отправка в JavaScript
+                // Экранируем Base64 для безопасной передачи
+                var escapedB64 = b64.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "\\r").Replace("\n", "\\n");
+                var script = $@"
+                    (function() {{
+                        try {{
+                            var b64 = '{escapedB64}';
+                            window.editorSetValue(base64ToUtf8(b64));
+                        }} catch(e) {{
+                            console.error('[C#->JS] Ошибка в editorSetValue:', e);
+                        }}
+                    }})();";
+                coreWebView2.ExecuteScriptAsync(script);                                                               // Отправка в JavaScript
                                                                                                                         // ExecuteScriptAsync() - выполняет JavaScript код асинхронно
                                                                                                                         // window.editorSetValue() - JS функция для установки значения редактора
-                                                                                                                        // base64ToUtf8('{b64}') - правильное декодирование Base64 → UTF-8
-                                                                                                                        // void(0); - предотвращает возврат значения (оптимизация)
+                                                                                                                        // base64ToUtf8() - правильное декодирование Base64 → UTF-8
+                                                                                                                        // notifyChange() вызывается внутри editorSetValue для обновления HTML
+                
+                // Явно конвертируем markdown в HTML и отправляем в preview
+                // Это гарантирует, что HTML обновится даже если notifyChange не сработает
+                var html = _renderer.RenderoHtml(_latestMarkdown);
+                System.Diagnostics.Debug.WriteLine($"[SetMarkdown] Конвертация markdown длиной {_latestMarkdown.Length} в HTML длиной {html.Length}");
+                PostRenderHtml(html);
             }
             catch (InvalidCastException)
             {
@@ -1189,14 +1206,20 @@ namespace WordMarkdownAddIn.Controls
                 window.renderHtml = function(html) {
                     try {
                         console.log('[JS] renderHtml вызван, длина HTML:', (html || '').length);
+                        if (!html) {
+                            console.warn('[JS] renderHtml получил пустой HTML');
+                            html = '';
+                        }
                         // Сохраняем исходный HTML
-                        rawHtml = html || '';
+                        rawHtml = html;
+                        console.log('[JS] rawHtml сохранен, длина:', rawHtml.length);
                         
                         // Обновляем отображение в зависимости от текущего режима
                         updatePreviewDisplay();
                         console.log('[JS] renderHtml завершен, preview обновлен');
                     } catch(e) { 
                         console.error('[JS] Ошибка рендеринга:', e); 
+                        console.error('[JS] Stack trace:', e.stack);
                     }
                 }
 
@@ -1255,6 +1278,9 @@ namespace WordMarkdownAddIn.Controls
                     
                     if (editor) {
                         editor.focus();
+                        // Отправляем начальное состояние markdown для конвертации в HTML
+                        // Это гарантирует, что preview будет обновлен при загрузке
+                        console.log('[JS] Отправка начального состояния markdown для конвертации в HTML');
                         notifyChange();
                     } else {
                         console.error('[JS] Не удалось получить элемент editor для focus');
