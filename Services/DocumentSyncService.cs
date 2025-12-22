@@ -42,6 +42,8 @@ namespace WordMarkdownAddIn.Services
                 {
                     return node.Text;                                                                               // возвращает текстовое содержимое узла
                 }                                                                                                   // Для CDATA-секций Text возвращает содержимое без CDATA-обертки
+                                                                                                                    // Если содержимое содержало "]]>", оно было разбито на несколько CDATA секций при сохранении
+                                                                                                                    // XML парсер автоматически объединяет несколько CDATA секций обратно в одно содержимое
             }
             catch { }                                                                                               //  игнорирует любые ошибки при работе с XML
             return null;
@@ -77,20 +79,28 @@ namespace WordMarkdownAddIn.Services
 
         /// <summary>
         /// Создаёт XML-строку с Markdown-содержимым, обёрнутым в CDATA.
+        /// Правильно обрабатывает случаи, когда содержимое содержит "]]>", разбивая CDATA на несколько секций.
         /// </summary>
         /// <param name="content">Markdown-содержимое, которое нужно включить в XML.</param>
         /// <returns>Строка в формате XML с корневым элементом 'markdown' и дочерним элементом 'content',
-        /// где содержимое заключено в секцию CDATA.</returns>
+        /// где содержимое заключено в секцию CDATA (или несколько секций, если содержимое содержит "]]>").</returns>
         private static string BuildXml(string content)
         {
             // Обернуть markdown в CDATA внутри корневого пространства имен
+            // Если содержимое содержит "]]>", нужно разбить CDATA на несколько секций
+            // Заменяем "]]>" на "]]]]><![CDATA[>", что создаст две CDATA секции с правильным содержимым
+            var safeContent = content.Replace("]]>", "]]]]><![CDATA[>");                                            // заменяет "]]>" на "]]]]><![CDATA[>"
+                                                                                                                    // Это разбивает CDATA на две секции: <![CDATA[...]]]><![CDATA[>...]]>
+                                                                                                                    // В результате XML парсер увидит: <![CDATA[...]]]><![CDATA[>...]]>
+                                                                                                                    // А фактическое содержимое останется: ...]]>...
             return "<md:markdown xmlns:md='" + NamespaceUri + "'>" +                                                // создает элемент <md:markdown>
                                                                                                                     // добавляет атрибут xmlns:md='urn:markdown/source'
                                                                                                                     // md: - префикс, связанный с нашим пространством имен
                                                                                                                     // NamespaceUri - константа urn:markdown/source
-                "<md:content><![CDATA[" + content + "]]></md:content>" +                                            // создает элемент <md:content>
+                "<md:content><![CDATA[" + safeContent + "]]></md:content>" +                                        // создает элемент <md:content>
                                                                                                                     // оборачивает content в <![CDATA[ ... ]]>
                                                                                                                     // CDATA предотвращает интерпретацию специальных XML-символов
+                                                                                                                    // Если content содержал "]]>", он будет разбит на несколько CDATA секций
                 "</md:markdown>";                                                                                   // завершает корневой элемент                                                                                     
         }
 

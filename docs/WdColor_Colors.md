@@ -122,3 +122,4 @@ private static readonly Dictionary<TokenType, Word.WdColor> TokenColors =
 - [Официальная документация Microsoft: WdColor Enumeration](https://learn.microsoft.com/en-us/dotnet/api/microsoft.office.interop.word.wdcolor?view=word-pia)
 - [VBA Reference: WdColor Enumeration](https://learn.microsoft.com/en-us/office/vba/api/word.wdcolor)
 
+
