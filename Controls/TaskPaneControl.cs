@@ -786,9 +786,9 @@ namespace WordMarkdownAddIn.Controls
             <script src=""https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js""></script>
             
             <script>
-                // Базовые переменные
-                const editor = document.getElementById('editor');
-                const preview = document.getElementById('preview');
+                // Базовые переменные (будут инициализированы после загрузки DOM)
+                let editor = null;
+                let preview = null;
                 
                 // Переменная для текущего режима отображения
                 let currentViewMode = 'split'; // по умолчанию
@@ -1017,24 +1017,58 @@ namespace WordMarkdownAddIn.Controls
                 }
 
                 function notifyChange() { 
+                    if (!editor) {
+                        console.error('[JS] notifyChange: editor не инициализирован');
+                        return;
+                    }
                     console.log('[JS] notifyChange вызван, длина markdown:', editor.value.length);
                     postToHost('mdChanged', editor.value); 
                 }
 
-                // Слушаем изменения в редакторе
-                editor.addEventListener('input', debounce(notifyChange, 120));
+                // Слушаем изменения в редакторе (будет установлено после инициализации)
+                function setupEditorListeners() {
+                    if (editor) {
+                        editor.addEventListener('input', debounce(notifyChange, 120));
+                        console.log('[JS] Обработчик input установлен для editor');
+                    } else {
+                        console.error('[JS] Не удалось установить обработчик input: editor не найден');
+                    }
+                }
 
                 // Методы для вызова из C#
                 window.editorSetValue = function(text) { 
+                    if (!editor) {
+                        console.error('[JS] editorSetValue: editor не инициализирован');
+                        // Пытаемся получить элемент еще раз
+                        editor = document.getElementById('editor');
+                        if (!editor) {
+                            console.error('[JS] editorSetValue: элемент editor не найден в DOM');
+                            return;
+                        }
+                    }
                     editor.value = text || ''; 
                     notifyChange(); 
                 }
                 
                 window.editorGetValue = function() { 
+                    if (!editor) {
+                        console.error('[JS] editorGetValue: editor не инициализирован');
+                        // Пытаемся получить элемент еще раз
+                        editor = document.getElementById('editor');
+                        if (!editor) {
+                            console.error('[JS] editorGetValue: элемент editor не найден в DOM');
+                            return '';
+                        }
+                    }
                     return editor.value || ''; 
                 }
 
                 window.insertAroundSelection = function(prefix, suffix) {
+                    if (!editor) {
+                        console.error('[JS] insertAroundSelection: editor не инициализирован');
+                        editor = document.getElementById('editor');
+                        if (!editor) return;
+                    }
                     prefix = prefix || ''; 
                     suffix = suffix || '';
                     const start = editor.selectionStart || 0;
@@ -1054,6 +1088,11 @@ namespace WordMarkdownAddIn.Controls
                 }
                 
                 window.insertSnippet = function(snippet) {
+                    if (!editor) {
+                        console.error('[JS] insertSnippet: editor не инициализирован');
+                        editor = document.getElementById('editor');
+                        if (!editor) return;
+                    }
                     const pos = editor.selectionStart || 0;
                     const val = editor.value;
                     editor.value = val.substring(0, pos) + snippet + val.substring(pos);
@@ -1170,6 +1209,17 @@ namespace WordMarkdownAddIn.Controls
                         return;
                     }
                     
+                    // Инициализируем переменные editor и preview после загрузки DOM
+                    editor = document.getElementById('editor');
+                    preview = document.getElementById('preview');
+                    
+                    if (!editor) {
+                        console.error('[JS] Элемент editor не найден!');
+                    }
+                    if (!preview) {
+                        console.error('[JS] Элемент preview не найден!');
+                    }
+                    
                     // Загрузка сохраненного режима из localStorage (с обработкой ошибок)
                     let savedMode = 'split';
                     try {
@@ -1200,9 +1250,14 @@ namespace WordMarkdownAddIn.Controls
                         }
                     }, 300);
                     
+                    // Устанавливаем обработчики событий для editor
+                    setupEditorListeners();
+                    
                     if (editor) {
                         editor.focus();
                         notifyChange();
+                    } else {
+                        console.error('[JS] Не удалось получить элемент editor для focus');
                     }
                 }
                 
