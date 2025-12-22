@@ -462,6 +462,8 @@ namespace WordMarkdownAddIn.Services
 
             // 1. Создаем новый параграф
             var paragraph = doc.Content.Paragraphs.Add();
+            // Отключаем форматирование списка, чтобы избежать наследования нумерации
+            paragraph.Range.ListFormat.RemoveNumbers();
 
             // 2. Применяем стиль (Heading 1, Normal и т.д.)
             try
@@ -554,6 +556,9 @@ namespace WordMarkdownAddIn.Services
 
             // 1. Создаем параграф для цитаты
             var quoteParagraph = doc.Content.Paragraphs.Add();
+
+            // Отключаем форматирование списка, чтобы избежать наследования нумерации
+            quoteParagraph.Range.ListFormat.RemoveNumbers();
 
             // 2. Получаем текст цитаты
             //string quoteText = "";
@@ -679,6 +684,8 @@ namespace WordMarkdownAddIn.Services
 
             // 1. Создаем параграф
             var paragraph = doc.Content.Paragraphs.Add();
+            // Отключаем форматирование списка, чтобы избежать наследования нумерации
+            paragraph.Range.ListFormat.RemoveNumbers();
 
             // 2. Получаем текст заголовка
             if (Content != null && Content.Runs.Count > 0)
