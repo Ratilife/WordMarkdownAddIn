@@ -836,74 +836,107 @@ namespace WordMarkdownAddIn.Services
         public void ApplyToWord(Document doc)
         {
             if (doc == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[WordTitle.ApplyToWord] doc равен null");
                 return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Начало применения заголовка уровня {Level}");
 
             // 1. Создаем параграф
             var paragraph = doc.Content.Paragraphs.Add();
             // Отключаем форматирование списка, чтобы избежать наследования нумерации
             paragraph.Range.ListFormat.RemoveNumbers();
 
-            // 2. Получаем текст заголовка
+            System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Параграф создан, Content: {(Content != null ? "не null" : "null")}, Runs.Count: {(Content?.Runs?.Count ?? 0)}");
+
+            // 2. Получаем текст заголовка и создаем Range для применения стилей
+            Range textRange = null;
+            
             if (Content != null && Content.Runs.Count > 0)
             {
+                string headingText = string.Join("", Content.Runs.Select(r => r?.Text ?? ""));
+                System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Применение форматированного текста: '{headingText}'");
+
+                // Вставляем текст
                 Content.ApplyToWord(doc, paragraph.Range);
+
+                // Используем paragraph.Range после вставки - он уже содержит только что вставленный текст
+                textRange = paragraph.Range;
+                System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] textRange создан: Start={textRange.Start}, End={textRange.End}, Text='{textRange.Text}'");
             }
             else if (!string.IsNullOrEmpty(Text))
             {
+                System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Применение простого текста: '{Text}'");
                 paragraph.Range.Text = Text;
+                textRange = paragraph.Range;
             }
             else if (Content != null && Content.Runs.Count == 0)
             {
                 // Если Content пустой, но не null, вставляем пустую строку
+                System.Diagnostics.Debug.WriteLine("[WordTitle.ApplyToWord] ВНИМАНИЕ: Content не null, но Runs.Count == 0, вставляем пустую строку");
                 paragraph.Range.Text = "";
+                textRange = paragraph.Range;
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[WordTitle.ApplyToWord] ВНИМАНИЕ: Content null и Text пустой!");
+                textRange = paragraph.Range;
             }
 
             // 3. Устанавливаем размер шрифта на основе уровня
             float fontSize = GetFontSizeForLevel(Level);
-            paragraph.Range.Font.Size = fontSize;
-
-            // 4. Делаем текст жирным
-            paragraph.Range.Font.Bold = -1;
-
-            // 5. Применяем стиль заголовка соответствующего уровня
-            try
+            if (textRange != null)
             {
-                WdBuiltinStyle headingStyle;
-                switch (Level)
+                textRange.Font.Size = fontSize;
+                System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Размер шрифта установлен: {fontSize}");
+
+                // 4. Делаем текст жирным
+                textRange.Font.Bold = -1;
+
+                // 5. Применяем стиль заголовка соответствующего уровня
+                try
                 {
-                    case 1:
-                        headingStyle = WdBuiltinStyle.wdStyleHeading1;
-                        break;
-                    case 2:
-                        headingStyle = WdBuiltinStyle.wdStyleHeading2;
-                        break;
-                    case 3:
-                        headingStyle = WdBuiltinStyle.wdStyleHeading3;
-                        break;
-                    case 4:
-                        headingStyle = WdBuiltinStyle.wdStyleHeading4;
-                        break;
-                    case 5:
-                        headingStyle = WdBuiltinStyle.wdStyleHeading5;
-                        break;
-                    case 6:
-                        headingStyle = WdBuiltinStyle.wdStyleHeading6;
-                        break;
-                    default:
-                        headingStyle = WdBuiltinStyle.wdStyleNormal;
-                        break;
+                    WdBuiltinStyle headingStyle;
+                    switch (Level)
+                    {
+                        case 1:
+                            headingStyle = WdBuiltinStyle.wdStyleHeading1;
+                            break;
+                        case 2:
+                            headingStyle = WdBuiltinStyle.wdStyleHeading2;
+                            break;
+                        case 3:
+                            headingStyle = WdBuiltinStyle.wdStyleHeading3;
+                            break;
+                        case 4:
+                            headingStyle = WdBuiltinStyle.wdStyleHeading4;
+                            break;
+                        case 5:
+                            headingStyle = WdBuiltinStyle.wdStyleHeading5;
+                            break;
+                        case 6:
+                            headingStyle = WdBuiltinStyle.wdStyleHeading6;
+                            break;
+                        default:
+                            headingStyle = WdBuiltinStyle.wdStyleNormal;
+                            System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] ВНИМАНИЕ: Неизвестный уровень заголовка {Level}, используется Normal");
+                            break;
+                    }
+                    System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Применение стиля заголовка уровня {Level}");
+                    textRange.set_Style(headingStyle);
+                    System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Стиль применен успешно");
                 }
-                paragraph.Range.set_Style(headingStyle);
-            }
-            catch
-            {
-                paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] ОШИБКА при применении стиля: {ex.Message}");
+                    textRange.set_Style(WdBuiltinStyle.wdStyleNormal);
+                }
 
+                // КРИТИЧЕСКИ ВАЖНО: Очищаем форматирование списка ПОСЛЕ применения стиля
+                // потому что стили заголовков в Word могут иметь встроенную нумерацию
+                textRange.ListFormat.RemoveNumbers();
             }
-
-            // КРИТИЧЕСКИ ВАЖНО: Очищаем форматирование списка ПОСЛЕ применения стиля
-            // потому что стили заголовков в Word могут иметь встроенную нумерацию
-            paragraph.Range.ListFormat.RemoveNumbers();
             
 
             // 6. Добавляем перенос строки
@@ -918,6 +951,7 @@ namespace WordMarkdownAddIn.Services
                 newParagraph.Range.ListFormat.RemoveNumbers();
             }
 
+            System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Заголовок уровня {Level} успешно применен к Word");
         }
     }
 

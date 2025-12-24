@@ -123,3 +123,4 @@ private static readonly Dictionary<TokenType, Word.WdColor> TokenColors =
 - [VBA Reference: WdColor Enumeration](https://learn.microsoft.com/en-us/office/vba/api/word.wdcolor)
 
 
+

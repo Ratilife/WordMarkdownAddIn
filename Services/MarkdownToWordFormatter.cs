@@ -37,8 +37,11 @@ namespace WordMarkdownAddIn.Services
             //Защита от null
             if (inline == null)
             { 
+                System.Diagnostics.Debug.WriteLine("[ConvertInlineToWordFormattedText] inline равен null");
                 return formattedText;
             }
+
+            System.Diagnostics.Debug.WriteLine($"[ConvertInlineToWordFormattedText] Начало обработки inline, FirstChild: {(inline.FirstChild != null ? inline.FirstChild.GetType().Name : "null")}");
 
             // Начинаем обход с первого дочернего элемента
             var current = inline.FirstChild;
@@ -157,6 +160,13 @@ namespace WordMarkdownAddIn.Services
                 current = current.NextSibling;
             }
 
+            System.Diagnostics.Debug.WriteLine($"[ConvertInlineToWordFormattedText] Завершено, создано Runs: {formattedText.Runs.Count}");
+            if (formattedText.Runs.Count > 0)
+            {
+                string totalText = string.Join("", formattedText.Runs.Select(r => r?.Text ?? ""));
+                System.Diagnostics.Debug.WriteLine($"[ConvertInlineToWordFormattedText] Общий текст: '{totalText}'");
+            }
+
             return formattedText;
         }
 
@@ -190,18 +200,45 @@ namespace WordMarkdownAddIn.Services
             try
             {
                 if (heading == null || _activeDoc == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ProcessHeading] heading или _activeDoc равен null");
                     return null;
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[ProcessHeading] Обработка заголовка уровня {heading.Level}");
+                System.Diagnostics.Debug.WriteLine($"[ProcessHeading] heading.Inline: {(heading.Inline != null ? "не null" : "null")}");
+                System.Diagnostics.Debug.WriteLine($"[ProcessHeading] heading.Inline.FirstChild: {(heading.Inline?.FirstChild != null ? heading.Inline.FirstChild.GetType().Name : "null")}");
 
                 //1. Извлекаем текст с форматированием
+                if (heading.Inline == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ProcessHeading] ВНИМАНИЕ: heading.Inline равен null!");
+                    return null;
+                }
+
                 var formattedText = ConvertInlineToWordFormattedText(heading.Inline);
 
+                // Проверяем, есть ли текст в заголовке
+                string headingText = "";
+                if (formattedText != null && formattedText.Runs != null && formattedText.Runs.Count > 0)
+                {
+                    headingText = string.Join("", formattedText.Runs.Select(r => r?.Text ?? ""));
+                    System.Diagnostics.Debug.WriteLine($"[ProcessHeading] Текст заголовка: '{headingText}' (длина: {headingText.Length})");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[ProcessHeading] ВНИМАНИЕ: formattedText пустой или нет Runs!");
+                }
+
                 // 2. Создаем WordTitle с уровнем заголовка
-                return new WordTitle("", formattedText, heading.Level);
+                var wordTitle = new WordTitle("", formattedText, heading.Level);
+                System.Diagnostics.Debug.WriteLine($"[ProcessHeading] WordTitle создан успешно, уровень: {heading.Level}");
+                return wordTitle;
             }
             catch (Exception ex)
             {
                 // Обработка ошибок
-                System.Diagnostics.Debug.WriteLine($"Ошибка при обработке заголовка: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ProcessHeading] Ошибка при обработке заголовка: {ex.Message}\n{ex.StackTrace}");
                 return null;
             }
         }
@@ -488,14 +525,23 @@ namespace WordMarkdownAddIn.Services
         private IWordElement ProcessBlock(Block block)
         {
             if (block == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[ProcessBlock] block равен null");
                 return null;
+            }
 
             try
             {
+                string blockType = block.GetType().Name;
+                System.Diagnostics.Debug.WriteLine($"[ProcessBlock] Обработка блока типа: {blockType}");
+
                 //Обработать каждый тип блока и вернуть результат
                 if (block is HeadingBlock heading)
                 {
-                    return ProcessHeading(heading);
+                    System.Diagnostics.Debug.WriteLine($"[ProcessBlock] Найден HeadingBlock, уровень: {heading.Level}");
+                    var result = ProcessHeading(heading);
+                    System.Diagnostics.Debug.WriteLine($"[ProcessBlock] ProcessHeading вернул: {(result != null ? result.GetType().Name : "null")}");
+                    return result;
                 }
                 else if (block is ParagraphBlock paragraph)
                 {
@@ -526,11 +572,12 @@ namespace WordMarkdownAddIn.Services
                 }
                 
                 // Если тип блока не распознан, возвращаем null
+                System.Diagnostics.Debug.WriteLine($"[ProcessBlock] Неизвестный тип блока: {blockType}");
                 return null;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Ошибка обработки блока {block.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ProcessBlock] Ошибка обработки блока {block.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
                 return null;
             }
         }
@@ -557,8 +604,21 @@ namespace WordMarkdownAddIn.Services
         // с форматированием
         public void ApplyMarkdownToWord(string markdown) 
         {
+            System.Diagnostics.Debug.WriteLine("=== [ApplyMarkdownToWord] НАЧАЛО ===");
+            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Длина markdown: {markdown?.Length ?? 0}");
+            if (markdown != null)
+            {
+                int length = Math.Min(500, markdown.Length);
+                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Первые {length} символов markdown:\n{markdown.Substring(0, length)}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[ApplyMarkdownToWord] markdown равен null");
+            }
+
             // 1. Парсим Markdown через Markdig
             var document = Markdown.Parse(markdown, _pipeline);
+            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Markdown распарсен, количество блоков: {document.Count}");
 
             // Очищаем документ перед вставкой нового контента
             _activeDoc.Content.Delete();
@@ -578,26 +638,52 @@ namespace WordMarkdownAddIn.Services
 
             // 2. Преобразуем в коллекцию IWordElement
             var elements = new List<IWordElement>();
+            int blockIndex = 0;
             foreach(var block in document)
             {
+                blockIndex++;
+                string blockType = block?.GetType().Name ?? "null";
+                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Блок #{blockIndex}: {blockType}");
+
                 // Списки обрабатываем отдельно, так как они могут содержать несколько элементов
                 if (block is ListBlock listBlock)
                 {
                     var listItems = ProcessListItems(listBlock);
+                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Добавлено элементов списка: {listItems.Count}");
                     elements.AddRange(listItems);
                 }
                 else
                 {
                     IWordElement element = ProcessBlock(block);
                     if(element != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Элемент добавлен: {element.GetType().Name}, ElementType: {element.ElementType}");
                         elements.Add(element);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] ВНИМАНИЕ: ProcessBlock вернул null для блока типа {blockType}");
+                    }
                 }
             }
 
+            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Всего элементов создано: {elements.Count}");
+
             // 3. Применяем все элементы к Word
+            int elementIndex = 0;
             foreach(var element in elements)
             {
-                element.ApplyToWord(_activeDoc);
+                elementIndex++;
+                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Применение элемента #{elementIndex}: {element.GetType().Name}, ElementType: {element.ElementType}");
+                try
+                {
+                    element.ApplyToWord(_activeDoc);
+                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Элемент #{elementIndex} успешно применен");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] ОШИБКА при применении элемента #{elementIndex}: {ex.Message}\n{ex.StackTrace}");
+                }
             }
         }
         // без форматирования
