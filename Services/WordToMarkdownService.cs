@@ -481,9 +481,21 @@ namespace WordMarkdownAddIn.Services
                 "Fira Code"
             };
 
+            // Подсчитываем общее количество параграфов для проверки размера блоков кода
+            int totalParagraphs = 0;
+            foreach (Paragraph para in _activeDoc.Paragraphs)
+            {
+                if (!IsParagraphInTable(para))
+                {
+                    totalParagraphs++;
+                }
+            }
+
             var codeBlockLines = new List<string>();
             int? codeBlockStartPosition = null;
             string detectedLanguage = "";
+            int codeBlockParagraphCount = 0;
+            var currentCodeBlockPositions = new List<int>(); // Отслеживаем позиции текущего блока кода
 
             foreach (Paragraph para in _activeDoc.Paragraphs)
             {
@@ -503,11 +515,39 @@ namespace WordMarkdownAddIn.Services
 
                 // Получаем шрифт первого символа параграфа
                 string fontName = "";
+                bool hasGrayBackground = false;
+                bool hasIndent = false;
+                
                 try
                 {
                     if (para.Range.Characters.Count > 0)
                     {
                         fontName = para.Range.Characters[1].Font.Name;
+                        
+                        // Проверяем наличие серого фона (характерный признак блока кода)
+                        try
+                        {
+                            var shadingColor = para.Range.Shading.BackgroundPatternColor;
+                            // Серый фон обычно имеет значение wdColorGray25 или похожие
+                            hasGrayBackground = (shadingColor == WdColor.wdColorGray25) ||
+                                               (shadingColor == WdColor.wdColorGray15) ||
+                                               (shadingColor == WdColor.wdColorGray10);
+                        }
+                        catch
+                        {
+                            // Если не удалось проверить фон, игнорируем
+                        }
+                        
+                        // Проверяем наличие отступов (характерный признак блока кода)
+                        try
+                        {
+                            hasIndent = para.Range.ParagraphFormat.LeftIndent > 0 ||
+                                       para.Range.ParagraphFormat.RightIndent > 0;
+                        }
+                        catch
+                        {
+                            // Если не удалось проверить отступы, игнорируем
+                        }
                     }
                 }
                 catch
@@ -516,12 +556,16 @@ namespace WordMarkdownAddIn.Services
                 }
 
                 // Проверяем, является ли параграф частью блока кода
-                bool isCodeParagraph = !string.IsNullOrEmpty(fontName) && monospaceFonts.Contains(fontName);
+                // Блок кода должен иметь моноширинный шрифт И (серый фон ИЛИ отступы)
+                // Это исключает случаи, когда весь документ имеет моноширинный шрифт
+                bool isCodeParagraph = !string.IsNullOrEmpty(fontName) && 
+                                      monospaceFonts.Contains(fontName) &&
+                                      (hasGrayBackground || hasIndent);
 
                 if (isCodeParagraph)
                 {
-                    // Убираем символ конца параграфа
-                    string text = para.Range.Text.TrimEnd('\r', '\a');
+                    // Убираем символ конца параграфа и пробелы в конце строки
+                    string text = para.Range.Text.TrimEnd('\r', '\a', ' ', '\t');
                     
                     if (!string.IsNullOrEmpty(text))
                     {
@@ -531,12 +575,17 @@ namespace WordMarkdownAddIn.Services
                             codeBlockStartPosition = para.Range.Start;
                             // Пытаемся определить язык по содержимому (опционально)
                             detectedLanguage = DetectLanguage(text);
+                            codeBlockParagraphCount = 0;
+                            currentCodeBlockPositions.Clear();
                         }
                         
                         // Добавляем строку кода
                         codeBlockLines.Add(text);
-                        // Отмечаем параграф как обработанный
-                        processedParagraphPositions.Add(para.Range.Start);
+                        codeBlockParagraphCount++;
+                        // Отмечаем параграф как обработанный и сохраняем позицию для возможного удаления
+                        int paraPosition = para.Range.Start;
+                        processedParagraphPositions.Add(paraPosition);
+                        currentCodeBlockPositions.Add(paraPosition);
                     }
                 }
                 else
@@ -544,10 +593,30 @@ namespace WordMarkdownAddIn.Services
                     // Если был начат блок кода, завершаем его
                     if (codeBlockStartPosition.HasValue)
                     {
-                        FinishCodeBlock(elements, processedParagraphPositions, codeBlockLines, codeBlockStartPosition.Value, detectedLanguage);
+                        // Проверяем, что блок кода не слишком большой (не более 50% документа)
+                        // Это защита от случая, когда весь документ определяется как блок кода
+                        double codeBlockPercentage = totalParagraphs > 0 ? 
+                            (double)codeBlockParagraphCount / totalParagraphs * 100 : 0;
+                        
+                        if (codeBlockPercentage <= 50.0)
+                        {
+                            FinishCodeBlock(elements, processedParagraphPositions, codeBlockLines, codeBlockStartPosition.Value, detectedLanguage);
+                        }
+                        else
+                        {
+                            // Если блок кода слишком большой, не создаем его
+                            // Удаляем позиции из processedParagraphPositions, чтобы эти параграфы были обработаны как обычные
+                            foreach (int position in currentCodeBlockPositions)
+                            {
+                                processedParagraphPositions.Remove(position);
+                            }
+                        }
+                        
                         codeBlockLines.Clear();
                         codeBlockStartPosition = null;
                         detectedLanguage = "";
+                        codeBlockParagraphCount = 0;
+                        currentCodeBlockPositions.Clear();
                     }
                 }
             }
@@ -555,7 +624,23 @@ namespace WordMarkdownAddIn.Services
             // Завершаем последний блок кода, если он был начат
             if (codeBlockStartPosition.HasValue)
             {
-                FinishCodeBlock(elements, processedParagraphPositions, codeBlockLines, codeBlockStartPosition.Value, detectedLanguage);
+                // Проверяем, что блок кода не слишком большой (не более 50% документа)
+                double codeBlockPercentage = totalParagraphs > 0 ? 
+                    (double)codeBlockParagraphCount / totalParagraphs * 100 : 0;
+                
+                if (codeBlockPercentage <= 50.0)
+                {
+                    FinishCodeBlock(elements, processedParagraphPositions, codeBlockLines, codeBlockStartPosition.Value, detectedLanguage);
+                }
+                else
+                {
+                    // Если блок кода слишком большой, не создаем его
+                    // Удаляем позиции из processedParagraphPositions, чтобы эти параграфы были обработаны как обычные
+                    foreach (int position in currentCodeBlockPositions)
+                    {
+                        processedParagraphPositions.Remove(position);
+                    }
+                }
             }
 
             return elements;
@@ -570,8 +655,14 @@ namespace WordMarkdownAddIn.Services
             if (codeLines.Count == 0)
                 return;
 
+            // Нормализуем код: убираем лишние пустые строки в начале и конце
+            var normalizedLines = NormalizeCodeLines(codeLines);
+
+            if (normalizedLines.Count == 0)
+                return;
+
             // Объединяем строки кода
-            string codeText = string.Join("\n", codeLines);
+            string codeText = string.Join("\n", normalizedLines);
 
             if (string.IsNullOrWhiteSpace(codeText))
                 return;
@@ -585,6 +676,59 @@ namespace WordMarkdownAddIn.Services
                 Element = codeBlock,
                 Position = startPosition
             });
+        }
+
+        /// <summary>
+        /// Нормализует строки кода: убирает пустые строки в начале и конце, заменяет множественные пустые строки подряд на одну
+        /// </summary>
+        private List<string> NormalizeCodeLines(List<string> lines)
+        {
+            if (lines == null || lines.Count == 0)
+                return new List<string>();
+
+            var normalizedLines = new List<string>();
+            bool lastWasEmpty = false;
+
+            // Убираем пустые строки в начале
+            int startIndex = 0;
+            while (startIndex < lines.Count && string.IsNullOrWhiteSpace(lines[startIndex]))
+            {
+                startIndex++;
+            }
+
+            // Убираем пустые строки в конце
+            int endIndex = lines.Count - 1;
+            while (endIndex >= startIndex && string.IsNullOrWhiteSpace(lines[endIndex]))
+            {
+                endIndex--;
+            }
+
+            // Обрабатываем строки между началом и концом
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                string line = lines[i];
+                bool isEmpty = string.IsNullOrWhiteSpace(line);
+                
+                if (isEmpty)
+                {
+                    // Если предыдущая строка не была пустой, добавляем одну пустую строку
+                    if (!lastWasEmpty)
+                    {
+                        normalizedLines.Add("");
+                        lastWasEmpty = true;
+                    }
+                    // Иначе пропускаем (не добавляем множественные пустые строки подряд)
+                }
+                else
+                {
+                    // Удаляем пробелы в конце строки (но сохраняем отступы в начале)
+                    string trimmedLine = line.TrimEnd();
+                    normalizedLines.Add(trimmedLine);
+                    lastWasEmpty = false;
+                }
+            }
+
+            return normalizedLines;
         }
 
         /// <summary>
