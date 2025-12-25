@@ -858,11 +858,30 @@ namespace WordMarkdownAddIn.Services
                 string headingText = string.Join("", Content.Runs.Select(r => r?.Text ?? ""));
                 System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] Применение форматированного текста: '{headingText}'");
 
+                // КРИТИЧЕСКИ ВАЖНО: Очищаем параграф перед вставкой текста
+                // Это гарантирует, что параграф пустой и не содержит предыдущего контента
+                paragraph.Range.Text = "";
+                
+                // Запоминаем начальную позицию для создания Range только вставленного текста
+                int startPosition = paragraph.Range.Start;
+                
                 // Вставляем текст
                 Content.ApplyToWord(doc, paragraph.Range);
 
-                // Используем paragraph.Range после вставки - он уже содержит только что вставленный текст
-                textRange = paragraph.Range;
+                // Создаем Range только для вставленного текста (от начальной позиции до текущей позиции range)
+                // Исключаем символ конца параграфа (\r), если он есть
+                int endPosition = paragraph.Range.End;
+                if (endPosition > startPosition)
+                {
+                    // Проверяем, есть ли символ конца параграфа
+                    Range checkRange = doc.Range(endPosition - 1, endPosition);
+                    if (checkRange.Text == "\r" || checkRange.Text == "\a")
+                    {
+                        endPosition--; // Исключаем символ конца параграфа
+                    }
+                }
+                
+                textRange = doc.Range(startPosition, endPosition);
                 System.Diagnostics.Debug.WriteLine($"[WordTitle.ApplyToWord] textRange создан: Start={textRange.Start}, End={textRange.End}, Text='{textRange.Text}'");
             }
             else if (!string.IsNullOrEmpty(Text))
