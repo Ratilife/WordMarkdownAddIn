@@ -24,12 +24,12 @@ namespace WordMarkdownAddIn.Services
     public class FormattedRun
     {
         public string ElementType => "Text";
-        public string Text { get; set; } = "";      //Сам текст
+        public string Text { get; set; } = "";      // Сам текст
         public bool IsBold { get; set; }            // Жирный шрифт
         public bool IsItalic { get; set; }          // Курсив
         public bool IsStrikethrough { get; set; }   // Зачеркнутый
         public bool IsUnderline { get; set; }       // Подчеркивание
-        public bool IsSuperscript { get; set; }     //Надстрочный текст (например, x²)
+        public bool IsSuperscript { get; set; }     // Надстрочный текст (например, x²)
         public bool IsSubscript { get; set; }       // Подстрочный текст (например, H₂O)
         public bool SmallCaps { get; set; }         // Уменьшенные заглавные буквы
         public bool AllCaps { get; set; }           // ВСЁ ЗАГЛАВНЫМИ (все буквы заглавные)
