@@ -475,23 +475,36 @@ namespace WordMarkdownAddIn.Services
             var elements = new List<IWordElement>();
 
             if (listBlock == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[ProcessListItems] listBlock равен null");
                 return elements;
+            }
 
             try
             {
                 // Определяем тип списка (нумерованный или маркированный)
                 bool isOrdered = listBlock.IsOrdered;
+                System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Начало обработки списка, IsOrdered={isOrdered}");
 
                 // Обрабатываем каждый элемент списка
+                int itemIndex = 0;
                 foreach (var item in listBlock)
                 {
+                    itemIndex++;
+                    System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Обработка элемента списка #{itemIndex}");
+                    
                     if (item is ListItemBlock listItem)
                     {
-                        // Обрабатываем параграфы внутри элемента списка
-                        var itemContents = new List<WordFormattedText>();
+                        // Обрабатываем элементы внутри элемента списка (параграфы и блоки кода)
+                        var itemContents = new List<IWordElement>();
+                        int blockIndex = 0;
 
                         foreach (var block in listItem)
                         {
+                            blockIndex++;
+                            string blockType = block?.GetType().Name ?? "null";
+                            System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}, блок #{blockIndex}: {blockType}");
+                            
                             if (block is ParagraphBlock paragraph)
                             {
                                 // Извлекаем форматированный текст элемента списка
@@ -499,23 +512,75 @@ namespace WordMarkdownAddIn.Services
                                 
                                 if (itemFormattedText != null && itemFormattedText.Runs.Count > 0)
                                 {
-                                    itemContents.Add(itemFormattedText);
+                                    string itemText = string.Join("", itemFormattedText.Runs.Select(r => r?.Text ?? ""));
+                                    System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}, блок #{blockIndex}: добавлен текст, Runs.Count={itemFormattedText.Runs.Count}, Text='{itemText}' (длина: {itemText.Length})");
+                                    itemContents.Add(itemFormattedText);  // WordFormattedText является IWordElement
                                 }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[ProcessListItems] ВНИМАНИЕ: Элемент #{itemIndex}, блок #{blockIndex}: itemFormattedText null или Runs.Count=0");
+                                }
+                            }
+                            else if (block is CodeBlock codeBlock)
+                            {
+                                // Обработка блока кода
+                                System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}, блок #{blockIndex}: найден CodeBlock");
+                                var codeElement = ProcessCodeBlock(codeBlock);
+                                if (codeElement != null)
+                                {
+                                    itemContents.Add(codeElement);  // WordCodeBlock является IWordElement
+                                    System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}, блок #{blockIndex}: блок кода добавлен");
+                                }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[ProcessListItems] ВНИМАНИЕ: Элемент #{itemIndex}, блок #{blockIndex}: ProcessCodeBlock вернул null");
+                                }
+                            }
+                            else if (block is ListBlock nestedListBlock)
+                            {
+                                // Обработка вложенного списка
+                                System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}, блок #{blockIndex}: найден вложенный ListBlock");
+                                var nestedListItems = ProcessListItems(nestedListBlock);
+                                if (nestedListItems != null && nestedListItems.Count > 0)
+                                {
+                                    itemContents.AddRange(nestedListItems);
+                                    System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}, блок #{blockIndex}: добавлено {nestedListItems.Count} элементов вложенного списка");
+                                }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[ProcessListItems] ВНИМАНИЕ: Элемент #{itemIndex}, блок #{blockIndex}: вложенный список пуст");
+                                }
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}, блок #{blockIndex}: не ParagraphBlock, не CodeBlock и не ListBlock, пропускаем (тип: {blockType})");
                             }
                         }
 
                         // Создаем WordListItem для каждого элемента списка
+                        System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}: itemContents.Count={itemContents.Count}");
                         if (itemContents.Count > 0)
                         {
                             var listItemElement = new WordListItem(itemContents, isOrdered);
                             elements.Add(listItemElement);
+                            System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Элемент #{itemIndex}: WordListItem создан и добавлен в elements");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ProcessListItems] ВНИМАНИЕ: Элемент #{itemIndex}: itemContents пуст, WordListItem НЕ создан");
                         }
                     }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ProcessListItems] ВНИМАНИЕ: Элемент #{itemIndex}: не ListItemBlock, пропускаем");
+                    }
                 }
+                
+                System.Diagnostics.Debug.WriteLine($"[ProcessListItems] Завершено: обработано {itemIndex} элементов списка, создано {elements.Count} WordListItem");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Ошибка обработки списка: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ProcessListItems] ОШИБКА обработки списка: {ex.Message}\n{ex.StackTrace}");
             }
 
             return elements;

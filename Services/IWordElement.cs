@@ -429,10 +429,10 @@ namespace WordMarkdownAddIn.Services
     public class WordListItem : IWordElement
     {
         public string ElementType => "ListItem";
-        public List<WordFormattedText> Contents { get; set; } // Неправильно для одного элемента списка
+        public List<IWordElement> Contents { get; set; }
         public bool IsOrdered { get; set; }
 
-        public WordListItem(List<WordFormattedText> contents, bool isOrdered)
+        public WordListItem(List<IWordElement> contents, bool isOrdered)
         {
             Contents = contents;
             IsOrdered = isOrdered;
@@ -452,6 +452,11 @@ namespace WordMarkdownAddIn.Services
                     if (!string.IsNullOrEmpty(markdown))
                     {
                         sb.Append(markdown);
+                        // Добавляем перенос строки между элементами
+                        if (content is WordCodeBlock)
+                        {
+                            sb.AppendLine();  // Блоки кода уже содержат переносы строк
+                        }
                     }
                 }
             }
@@ -460,43 +465,101 @@ namespace WordMarkdownAddIn.Services
         }
         public void ApplyToWord(Document doc)
         {
+            System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] НАЧАЛО: Contents.Count={Contents?.Count ?? 0}, IsOrdered={IsOrdered}");
+            
             if (doc == null || Contents == null || Contents.Count == 0)
+            {
+                System.Diagnostics.Debug.WriteLine("[WordListItem.ApplyToWord] ВЫХОД: doc или Contents null или пусто");
                 return;
+            }
 
-            // Обрабатываем каждый параграф внутри элемента списка
+            // Обрабатываем каждый элемент внутри элемента списка
+            int contentIndex = 0;
             foreach (var content in Contents)
             {
+                contentIndex++;
+                System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Обработка content #{contentIndex}/{Contents.Count}, тип: {content?.GetType().Name ?? "null"}");
+                
                 if (content == null)
-                    continue;
-
-                // 1. Создаем параграф для элемента списка
-                var listParagraph = doc.Content.Paragraphs.Add();
-
-                // 2. Применяем форматированный текст
-                content.ApplyToWord(doc, listParagraph.Range);
-
-                // 3. Применяем форматирование списка
-                if (IsOrdered)
                 {
-                    // Нумерованный список
-                    listParagraph.Range.ListFormat.ApplyNumberDefault();
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] ВНИМАНИЕ: content #{contentIndex} равен null, пропускаем");
+                    continue;
+                }
+
+                // Проверяем тип элемента
+                if (content is WordFormattedText formattedText)
+                {
+                    // Обработка форматированного текста (как было раньше)
+                    // Проверяем содержимое content перед применением
+                    int runsCount = formattedText.Runs?.Count ?? 0;
+                    string contentText = formattedText != null ? string.Join("", formattedText.Runs?.Select(r => r?.Text ?? "") ?? new string[0]) : "";
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] content #{contentIndex}: Runs.Count={runsCount}, Text='{contentText}' (длина: {contentText.Length})");
+
+                    // 1. Создаем параграф для элемента списка
+                    var listParagraph = doc.Content.Paragraphs.Add();
+                    listParagraph.Range.Text = "";
+                    int paragraphStart = listParagraph.Range.Start;
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Параграф создан, Start={paragraphStart}");
+                 
+                    // 2. Применяем форматированный текст
+                    formattedText.ApplyToWord(doc, listParagraph.Range);
+                    
+                    // Проверяем, что текст был вставлен
+                    int paragraphEndAfterInsert = listParagraph.Range.End;
+                    string paragraphTextAfterInsert = listParagraph.Range.Text ?? "";
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] После вставки текста: End={paragraphEndAfterInsert}, Text='{paragraphTextAfterInsert}' (длина: {paragraphTextAfterInsert.Length})");
+
+                    // 3. Применяем форматирование списка
+                    if (IsOrdered)
+                    {
+                        // Нумерованный список
+                        System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Применение нумерованного списка");
+                        listParagraph.Range.ListFormat.ApplyNumberDefault();
+                    }
+                    else
+                    {
+                        // Маркированный список
+                        System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Применение маркированного списка");
+                        listParagraph.Range.ListFormat.ApplyBulletDefault();
+                    }
+
+                    // 4. Добавляем перенос строки
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Вызов InsertParagraphAfter()");
+                    listParagraph.Range.InsertParagraphAfter();
+                    
+                    // Получаем последний параграф (который был создан через InsertParagraphAfter)
+                    var lastParagraphIndex = doc.Content.Paragraphs.Count;
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] После InsertParagraphAfter: lastParagraphIndex={lastParagraphIndex}");
+                    
+                    if (lastParagraphIndex > 0)
+                    {
+                        var newParagraph = doc.Content.Paragraphs[lastParagraphIndex];
+                        string newParagraphText = newParagraph.Range.Text ?? "";
+                        System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Новый параграф (после InsertParagraphAfter): Text='{newParagraphText}' (длина: {newParagraphText.Length})");
+                        newParagraph.Range.ListFormat.RemoveNumbers();
+                        System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Форматирование списка удалено из нового параграфа");
+                    }
+                }
+                else if (content is WordCodeBlock codeBlock)
+                {
+                    // Обработка блока кода
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Обработка блока кода");
+                    
+                    // Блок кода применяется БЕЗ форматирования списка
+                    // (блоки кода не должны быть частью списка)
+                    codeBlock.ApplyToWord(doc);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Блок кода применен");
                 }
                 else
                 {
-                    // Маркированный список
-                    listParagraph.Range.ListFormat.ApplyBulletDefault();
-                }
-
-                // 4. Добавляем перенос строки
-                listParagraph.Range.InsertParagraphAfter();
-                // Получаем последний параграф (который был создан через InsertParagraphAfter)
-                var lastParagraphIndex = doc.Content.Paragraphs.Count;
-                if (lastParagraphIndex > 0)
-                {
-                    var newParagraph = doc.Content.Paragraphs[lastParagraphIndex];
-                    newParagraph.Range.ListFormat.RemoveNumbers();
+                    // Обработка других типов элементов (если понадобится в будущем)
+                    System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] Обработка элемента типа: {content.GetType().Name}");
+                    content.ApplyToWord(doc);
                 }
             }
+            
+            System.Diagnostics.Debug.WriteLine($"[WordListItem.ApplyToWord] ЗАВЕРШЕНО: обработано {contentIndex} элементов");
         }
     }
 

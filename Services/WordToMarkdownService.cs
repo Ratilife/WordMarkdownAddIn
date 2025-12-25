@@ -334,7 +334,7 @@ namespace WordMarkdownAddIn.Services
                     bool isOrdered = (para.Range.ListFormat.ListType != WdListType.wdListBullet);
                     // Это элемент списка
                     var content = ExtractFormattedContent(para.Range);
-                    var contentList = new List<WordFormattedText> { content }; // Создаем список и добавляем один элемент
+                    var contentList = new List<IWordElement> { content }; // Создаем список и добавляем один элемент (WordFormattedText является IWordElement)
                     // ✅ ИЗМЕНИТЬ: Сохраняем элемент вместе с позицией
                     elements.Add(new ElementWithPosition 
                     { 
