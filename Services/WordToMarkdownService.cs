@@ -49,16 +49,21 @@ namespace WordMarkdownAddIn.Services
         /// <returns>Список элементов документа в порядке их появления.</returns>
         public List<IWordElement> ExtractDocumentStructure()
         {
-            // ✅ ИЗМЕНИТЬ: Используем новый тип ElementWithPosition вместо IWordElement
+           
             var elements = new List<ElementWithPosition>();
+            var processedParagraphPositions = new HashSet<int>();
 
+            // Извлекаем блоки кода ПЕРЕД параграфами (чтобы не обрабатывать их дважды)
+            elements = ExtractCodeBlock(elements, processedParagraphPositions);
+            
             // Извлекаем параграфы (теперь они сохраняют позицию при извлечении)
-            elements = ExtractParagraphs(elements);
+            // Пропускаем параграфы, которые уже обработаны как блоки кода
+            elements = ExtractParagraphs(elements, processedParagraphPositions);
             
             // Извлекаем таблицы (теперь они сохраняют позицию при извлечении)
             elements = ExtractTables(elements);
             
-            // ✅ ИЗМЕНИТЬ: Просто сортируем по позиции и возвращаем только элементы
+            //  Просто сортируем по позиции и возвращаем только элементы
             // Больше не нужно вызывать GetElementStartPosition, так как позиция уже сохранена
             return elements
                 .OrderBy(x => x.Position)
@@ -141,6 +146,12 @@ namespace WordMarkdownAddIn.Services
                             else if (element is WordListItem)
                             {
                                 // Элементы списка - добавляем одну пустую строку
+                                sb.AppendLine();
+                            }
+                            else if (element is WordCodeBlock)
+                            {
+                                // Блоки кода уже заканчиваются переносом строки в ToMarkdown()
+                                // Добавляем одну пустую строку для разделения
                                 sb.AppendLine();
                             }
                             else
@@ -293,7 +304,7 @@ namespace WordMarkdownAddIn.Services
 
         // 2. Параграфы
         
-        private List<ElementWithPosition> ExtractParagraphs(List<ElementWithPosition> elements )
+        private List<ElementWithPosition> ExtractParagraphs(List<ElementWithPosition> elements, HashSet<int> processedParagraphPositions)
         {
             // Обходим все параграфы
             foreach (Paragraph para in _activeDoc.Paragraphs)
@@ -303,13 +314,18 @@ namespace WordMarkdownAddIn.Services
                 {
                     continue; // Пропускаем этот параграф
                 }
+                
+                // ✅ ПРОВЕРКА: Пропускаем параграфы, которые уже обработаны как блоки кода
+                int paragraphPosition = para.Range.Start;
+                if (processedParagraphPositions.Contains(paragraphPosition))
+                {
+                    continue; // Пропускаем этот параграф, он уже в блоке кода
+                }
+                
                 // Убираем символ конца параграфа
                 string text = para.Range.Text.TrimEnd('\r', '\a');
                 
                 if (string.IsNullOrEmpty(text)) continue;
-                
-                // ✅ ДОБАВИТЬ: Сохраняем позицию параграфа для последующей сортировки
-                int paragraphPosition = para.Range.Start;
                 
                 //Определяем тип параграфа
                 string styleName = para.get_Style().NameLocal;
@@ -441,9 +457,165 @@ namespace WordMarkdownAddIn.Services
 
         }
         //7.Блоки Кода 
-        private void ExtractCodeBlock()
+        /// <summary>
+        /// Извлекает блоки кода из документа Word.
+        /// Блоки кода определяются по моноширинному шрифту (Consolas, Courier New, Courier и т.д.).
+        /// Последовательные параграфы с моноширинным шрифтом группируются в один блок кода.
+        /// </summary>
+        /// <param name="elements">Список элементов для добавления найденных блоков кода</param>
+        /// <param name="processedParagraphPositions">Множество позиций параграфов, которые уже обработаны (для пропуска в ExtractParagraphs)</param>
+        /// <returns>Обновленный список элементов с добавленными блоками кода</returns>
+        private List<ElementWithPosition> ExtractCodeBlock(List<ElementWithPosition> elements, HashSet<int> processedParagraphPositions)
         {
+            // Список моноширинных шрифтов, которые используются для кода
+            var monospaceFonts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Consolas",
+                "Courier New",
+                "Courier",
+                "Lucida Console",
+                "Monaco",
+                "Menlo",
+                "DejaVu Sans Mono",
+                "Source Code Pro",
+                "Fira Code"
+            };
 
+            var codeBlockLines = new List<string>();
+            int? codeBlockStartPosition = null;
+            string detectedLanguage = "";
+
+            foreach (Paragraph para in _activeDoc.Paragraphs)
+            {
+                // Пропускаем параграфы внутри таблиц
+                if (IsParagraphInTable(para))
+                {
+                    // Если был начат блок кода, завершаем его
+                    if (codeBlockStartPosition.HasValue)
+                    {
+                        FinishCodeBlock(elements, processedParagraphPositions, codeBlockLines, codeBlockStartPosition.Value, detectedLanguage);
+                        codeBlockLines.Clear();
+                        codeBlockStartPosition = null;
+                        detectedLanguage = "";
+                    }
+                    continue;
+                }
+
+                // Получаем шрифт первого символа параграфа
+                string fontName = "";
+                try
+                {
+                    if (para.Range.Characters.Count > 0)
+                    {
+                        fontName = para.Range.Characters[1].Font.Name;
+                    }
+                }
+                catch
+                {
+                    // Если не удалось получить шрифт, пропускаем
+                }
+
+                // Проверяем, является ли параграф частью блока кода
+                bool isCodeParagraph = !string.IsNullOrEmpty(fontName) && monospaceFonts.Contains(fontName);
+
+                if (isCodeParagraph)
+                {
+                    // Убираем символ конца параграфа
+                    string text = para.Range.Text.TrimEnd('\r', '\a');
+                    
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        // Если блок кода еще не начат, запоминаем начальную позицию
+                        if (!codeBlockStartPosition.HasValue)
+                        {
+                            codeBlockStartPosition = para.Range.Start;
+                            // Пытаемся определить язык по содержимому (опционально)
+                            detectedLanguage = DetectLanguage(text);
+                        }
+                        
+                        // Добавляем строку кода
+                        codeBlockLines.Add(text);
+                        // Отмечаем параграф как обработанный
+                        processedParagraphPositions.Add(para.Range.Start);
+                    }
+                }
+                else
+                {
+                    // Если был начат блок кода, завершаем его
+                    if (codeBlockStartPosition.HasValue)
+                    {
+                        FinishCodeBlock(elements, processedParagraphPositions, codeBlockLines, codeBlockStartPosition.Value, detectedLanguage);
+                        codeBlockLines.Clear();
+                        codeBlockStartPosition = null;
+                        detectedLanguage = "";
+                    }
+                }
+            }
+
+            // Завершаем последний блок кода, если он был начат
+            if (codeBlockStartPosition.HasValue)
+            {
+                FinishCodeBlock(elements, processedParagraphPositions, codeBlockLines, codeBlockStartPosition.Value, detectedLanguage);
+            }
+
+            return elements;
+        }
+
+        /// <summary>
+        /// Завершает блок кода и добавляет его в список элементов
+        /// </summary>
+        private void FinishCodeBlock(List<ElementWithPosition> elements, HashSet<int> processedParagraphPositions, 
+            List<string> codeLines, int startPosition, string language)
+        {
+            if (codeLines.Count == 0)
+                return;
+
+            // Объединяем строки кода
+            string codeText = string.Join("\n", codeLines);
+
+            if (string.IsNullOrWhiteSpace(codeText))
+                return;
+
+            // Создаем WordCodeBlock
+            var codeBlock = new WordCodeBlock(codeText, language);
+            
+            // Добавляем в список элементов
+            elements.Add(new ElementWithPosition
+            {
+                Element = codeBlock,
+                Position = startPosition
+            });
+        }
+
+        /// <summary>
+        /// Пытается определить язык программирования по содержимому кода
+        /// </summary>
+        private string DetectLanguage(string code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+                return "";
+
+            string firstLine = code.Split('\n')[0].Trim();
+
+            // Простые эвристики для определения языка
+            if (firstLine.Contains("using ") && firstLine.Contains(";"))
+                return "csharp";
+            if (firstLine.Contains("def ") || firstLine.Contains("import ") || firstLine.Contains("from "))
+                return "python";
+            if (firstLine.Contains("function ") || firstLine.Contains("const ") || firstLine.Contains("let "))
+                return "javascript";
+            if (firstLine.Contains("public class") || firstLine.Contains("private "))
+                return "java";
+            if (firstLine.Contains("<?php") || firstLine.Contains("<?="))
+                return "php";
+            if (firstLine.Contains("SELECT") || firstLine.Contains("INSERT") || firstLine.Contains("UPDATE"))
+                return "sql";
+            if (firstLine.Contains("<!DOCTYPE") || firstLine.Contains("<html"))
+                return "html";
+            if (firstLine.Contains("package ") && firstLine.Contains("import "))
+                return "go";
+
+            return ""; // Язык не определен
         }
     }
 }
