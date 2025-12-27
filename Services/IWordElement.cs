@@ -1230,14 +1230,24 @@ namespace WordMarkdownAddIn.Services
 
             try
             {
-                // 1.Сохраняем начальную позицию
+                // 1. НОРМАЛИЗАЦИЯ КОДА: Удаляем все пустые строки перед вставкой
+                string normalizedCode = NormalizeCode(Code);
+
+                // Проверяем, что после нормализации код не стал пустым
+                if (string.IsNullOrEmpty(normalizedCode))
+                {
+                    // Если код стал пустым после нормализации, ничего не вставляем
+                    return;
+                }
+
+                // 2. Сохраняем начальную позицию
                 int startPos = doc.Content.End - 1;
 
-                // 2.Вставляем код через InsertAfter
+                // 3. Вставляем нормализованный код через InsertAfter
                 var insertRange = doc.Range(startPos);
-                insertRange.InsertAfter(Code);
+                insertRange.InsertAfter(normalizedCode);  // ← Используем normalizedCode вместо Code
 
-                // 3.Создаем Range для всего вставленного кода
+                // 4.Создаем Range для всего вставленного кода
                 int endPos = doc.Content.End - 1;
                 //Исключаем символ конца параграфа, если он есть
                 if (endPos > startPos && doc.Range(endPos - 1, endPos).Text == "\r")
@@ -1246,12 +1256,12 @@ namespace WordMarkdownAddIn.Services
                 }
                 var codeRange = doc.Range(startPos,endPos);
 
-                // 4. Применяем форматирование к codeRange
+                // 5. Применяем форматирование к codeRange
                 codeRange.Font.Name = "Consolas";
                 codeRange.Font.Size = 10;
                 codeRange.Shading.BackgroundPatternColorIndex = (WdColorIndex)WdColor.wdColorGray25;
 
-                // 5. ПРИМЕНЯЕМ СТИЛЬ ПЕРЕД ПОДСВЕТКОЙ, чтобы не перезаписать цвета
+                // 6. ПРИМЕНЯЕМ СТИЛЬ ПЕРЕД ПОДСВЕТКОЙ, чтобы не перезаписать цвета
                 // Применяем стиль "Normal" для базового форматирования
                 //codeRange.set_Style("Normal");
 
@@ -1263,7 +1273,7 @@ namespace WordMarkdownAddIn.Services
                 codeRange.ParagraphFormat.SpaceBefore = 6;
                 codeRange.ParagraphFormat.SpaceAfter = 6;
 
-                // 8. ПРИМЕНЯЕМ ПОДСВЕТКУ СИНТАКСИСА ПОСЛЕ применения стиля и форматирования
+                // 7. ПРИМЕНЯЕМ ПОДСВЕТКУ СИНТАКСИСА ПОСЛЕ применения стиля и форматирования
                 // Нормализуем язык (приводим к нижнему регистру)
                 string normalizedLanguage = (Language ?? "").ToLower().Trim();
                 if (string.IsNullOrEmpty(normalizedLanguage))
@@ -1276,7 +1286,7 @@ namespace WordMarkdownAddIn.Services
                 // Теперь передаем только Range и язык - токены будут парситься из реального текста Word
                 SyntaxHighlighter.HighlightCodeBlock(codeRange, normalizedLanguage);
 
-                // 6. Добавляем пустой параграф после кода
+                // 8. Добавляем пустой параграф после кода
                 doc.Content.Paragraphs.Add();
 
             }
