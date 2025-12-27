@@ -151,8 +151,7 @@ namespace WordMarkdownAddIn.Services
                             else if (element is WordCodeBlock)
                             {
                                 // Блоки кода уже заканчиваются переносом строки в ToMarkdown()
-                                // Добавляем одну пустую строку для разделения
-                                sb.AppendLine();
+                                // Не добавляем дополнительную пустую строку, чтобы избежать лишних пустых строк
                             }
                             else
                             {
@@ -565,20 +564,33 @@ namespace WordMarkdownAddIn.Services
                 if (isCodeParagraph)
                 {
                     // Убираем символ конца параграфа и пробелы в конце строки
-                    string text = para.Range.Text.TrimEnd('\r', '\a', ' ', '\t');
+                    // Также убираем все управляющие символы и нормализуем пробелы
+                    string text = para.Range.Text.TrimEnd('\r', '\a', ' ', '\t', '\n');
+                    text = text.TrimStart(' ', '\t', '\n', '\r');
                     
-                    if (!string.IsNullOrEmpty(text))
+                    // Дополнительная нормализация: убираем все управляющие символы
+                    text = text.Replace("\r\n", "").Replace("\r", "").Replace("\n", "");
+                    
+                    // Если блок кода еще не начат, запоминаем начальную позицию
+                    if (!codeBlockStartPosition.HasValue)
                     {
-                        // Если блок кода еще не начат, запоминаем начальную позицию
-                        if (!codeBlockStartPosition.HasValue)
+                        // Пропускаем пустые параграфы в начале блока кода
+                        if (string.IsNullOrWhiteSpace(text))
                         {
-                            codeBlockStartPosition = para.Range.Start;
-                            // Пытаемся определить язык по содержимому (опционально)
-                            detectedLanguage = DetectLanguage(text);
-                            codeBlockParagraphCount = 0;
-                            currentCodeBlockPositions.Clear();
+                            continue;
                         }
                         
+                        codeBlockStartPosition = para.Range.Start;
+                        // Пытаемся определить язык по содержимому (опционально)
+                        detectedLanguage = DetectLanguage(text);
+                        codeBlockParagraphCount = 0;
+                        currentCodeBlockPositions.Clear();
+                    }
+                    
+                    // Добавляем только непустые строки кода
+                    // Пустые параграфы внутри блока кода полностью пропускаем (не добавляем в codeBlockLines)
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
                         // Добавляем строку кода
                         codeBlockLines.Add(text);
                         codeBlockParagraphCount++;
@@ -587,12 +599,35 @@ namespace WordMarkdownAddIn.Services
                         processedParagraphPositions.Add(paraPosition);
                         currentCodeBlockPositions.Add(paraPosition);
                     }
+                    else
+                    {
+                        // Пустой параграф внутри блока кода - отмечаем как обработанный, но не добавляем в codeBlockLines
+                        int paraPosition = para.Range.Start;
+                        processedParagraphPositions.Add(paraPosition);
+                        currentCodeBlockPositions.Add(paraPosition);
+                    }
                 }
                 else
                 {
-                    // Если был начат блок кода, завершаем его
+                    // Если был начат блок кода, проверяем, не является ли текущий параграф пустым
+                    // Пустые параграфы между параграфами блока кода должны быть пропущены
                     if (codeBlockStartPosition.HasValue)
                     {
+                        // Проверяем, является ли текущий параграф пустым
+                        string paraText = para.Range.Text.TrimEnd('\r', '\a', ' ', '\t', '\n');
+                        bool isEmptyParagraph = string.IsNullOrWhiteSpace(paraText);
+                        
+                        // Если параграф пустой, пропускаем его и продолжаем блок кода
+                        if (isEmptyParagraph)
+                        {
+                            // Отмечаем пустой параграф как обработанный, но не добавляем в codeBlockLines
+                            int paraPosition = para.Range.Start;
+                            processedParagraphPositions.Add(paraPosition);
+                            currentCodeBlockPositions.Add(paraPosition);
+                            continue; // Пропускаем пустой параграф и продолжаем блок кода
+                        }
+                        
+                        // Если параграф не пустой и не является частью блока кода, завершаем блок кода
                         // Проверяем, что блок кода не слишком большой (не более 50% документа)
                         // Это защита от случая, когда весь документ определяется как блок кода
                         double codeBlockPercentage = totalParagraphs > 0 ? 
@@ -663,6 +698,17 @@ namespace WordMarkdownAddIn.Services
 
             // Объединяем строки кода
             string codeText = string.Join("\n", normalizedLines);
+            
+            // Дополнительная нормализация: убираем все двойные и более переносы строк подряд
+            // Заменяем все множественные переносы строк (два и более) на одинарные
+            while (codeText.Contains("\n\n"))
+            {
+                codeText = codeText.Replace("\n\n", "\n");
+            }
+            
+            // Убираем переносы строк в начале и конце
+            codeText = codeText.TrimStart('\n', '\r');
+            codeText = codeText.TrimEnd('\n', '\r');
 
             if (string.IsNullOrWhiteSpace(codeText))
                 return;
@@ -679,7 +725,7 @@ namespace WordMarkdownAddIn.Services
         }
 
         /// <summary>
-        /// Нормализует строки кода: убирает пустые строки в начале и конце, заменяет множественные пустые строки подряд на одну
+        /// Нормализует строки кода: убирает пустые строки в начале и конце, полностью удаляет пустые строки между непустыми строками
         /// </summary>
         private List<string> NormalizeCodeLines(List<string> lines)
         {
@@ -687,7 +733,6 @@ namespace WordMarkdownAddIn.Services
                 return new List<string>();
 
             var normalizedLines = new List<string>();
-            bool lastWasEmpty = false;
 
             // Убираем пустые строки в начале
             int startIndex = 0;
@@ -704,28 +749,19 @@ namespace WordMarkdownAddIn.Services
             }
 
             // Обрабатываем строки между началом и концом
+            // Полностью удаляем все пустые строки между непустыми строками
             for (int i = startIndex; i <= endIndex; i++)
             {
                 string line = lines[i];
                 bool isEmpty = string.IsNullOrWhiteSpace(line);
                 
-                if (isEmpty)
-                {
-                    // Если предыдущая строка не была пустой, добавляем одну пустую строку
-                    if (!lastWasEmpty)
-                    {
-                        normalizedLines.Add("");
-                        lastWasEmpty = true;
-                    }
-                    // Иначе пропускаем (не добавляем множественные пустые строки подряд)
-                }
-                else
+                if (!isEmpty)
                 {
                     // Удаляем пробелы в конце строки (но сохраняем отступы в начале)
                     string trimmedLine = line.TrimEnd();
                     normalizedLines.Add(trimmedLine);
-                    lastWasEmpty = false;
                 }
+                // Пустые строки полностью пропускаем (не добавляем их в результат)
             }
 
             return normalizedLines;
