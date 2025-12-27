@@ -105,58 +105,74 @@ namespace WordMarkdownAddIn.Services
                     {
                         sb.Append(markdown);
                         
-                        // Добавляем переносы строк в зависимости от типа элемента
+                        // Добавляем переносы строк в зависимости от типа элемента и следующего элемента
                         bool isLastElement = (i == elements.Count - 1);
                         
                         if (!isLastElement)
                         {
-                            if (element is WordTable)
+                            // Получаем следующий элемент для контекстной обработки
+                            var nextElement = elements[i + 1];
+                            
+                            // Элементы списка не должны иметь пустых строк между ними
+                            if (element is WordListItem && nextElement is WordListItem)
+                            {
+                                // Элементы списка идут подряд - не добавляем пустые строки
+                                // WordListItem.ToMarkdown() не добавляет перенос строки в конце
+                                sb.AppendLine();
+                            }
+                            // Если следующий элемент - блок кода, не добавляем лишние пустые строки
+                            else if (nextElement is WordCodeBlock)
+                            {
+                                // Блоки кода уже начинаются с переноса строки в ToMarkdown()
+                                // Достаточно одного переноса строки перед блоком кода
+                                sb.AppendLine();
+                            }
+                            // Если текущий элемент - блок кода
+                            else if (element is WordCodeBlock)
+                            {
+                                // Блоки кода уже заканчиваются переносом строки в ToMarkdown()
+                                // Добавляем одну пустую строку после блока кода
+                                sb.AppendLine();
+                            }
+                            else if (element is WordTable)
                             {
                                 // Таблицы уже содержат переносы строк, добавляем одну пустую строку
-                                sb.AppendLine();
                                 sb.AppendLine();
                             }
                             else if (element is WordQuote)
                             {
                                 // Цитаты уже содержат переносы строк, добавляем одну пустую строку
                                 sb.AppendLine();
-                                sb.AppendLine();
                             }
                             else if (element is WordParagraph para)
                             {
                                 if (para.HeadingLevel > 0)
                                 {
-                                    // Заголовки - добавляем пустую строку после
-                                    sb.AppendLine();
+                                    // Заголовки - добавляем одну пустую строку после (не две)
                                     sb.AppendLine();
                                 }
                                 else
                                 {
-                                    // Обычные параграфы - добавляем две пустые строки для разделения
-                                    sb.AppendLine();
+                                    // Обычные параграфы - добавляем одну пустую строку для разделения (не две)
                                     sb.AppendLine();
                                 }
                             }
                             else if (element is WordTitle || element is WordSubtitle)
                             {
-                                // Заголовки и подзаголовки - добавляем пустую строку после
-                                sb.AppendLine();
+                                // Заголовки и подзаголовки - добавляем одну пустую строку после (не две)
                                 sb.AppendLine();
                             }
                             else if (element is WordListItem)
                             {
-                                // Элементы списка - добавляем одну пустую строку
-                                sb.AppendLine();
-                            }
-                            else if (element is WordCodeBlock)
-                            {
-                                // Блоки кода уже заканчиваются переносом строки в ToMarkdown()
-                                // Не добавляем дополнительную пустую строку, чтобы избежать лишних пустых строк
+                                // Элементы списка - если следующий элемент не список, добавляем одну пустую строку
+                                if (!(nextElement is WordListItem))
+                                {
+                                    sb.AppendLine();
+                                }
                             }
                             else
                             {
-                                // Другие элементы - добавляем две пустые строки
-                                sb.AppendLine();
+                                // Другие элементы - добавляем одну пустую строку (не две)
                                 sb.AppendLine();
                             }
                         }
