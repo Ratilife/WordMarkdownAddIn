@@ -1122,6 +1122,29 @@ namespace WordMarkdownAddIn.Services
         }
 
         /// <summary>
+        /// Нормализует код, удаляя все пустые строки.
+        /// Пустой строкой считается строка, содержащая только пробелы, табуляции, переносы строк или их комбинации.
+        /// </summary>
+        /// <param name="code">Исходный код для нормализации</param>
+        /// <returns>Нормализованный код без пустых строк</returns>
+        private string NormalizeCode(string code)
+        {
+            // Проверяем, что код не пустой
+            if (string.IsNullOrEmpty(code))
+                return code;
+
+            // Разбиваем код на строки, учитывая различные форматы переносов строк
+            // StringSplitOptions.None сохраняет пустые строки в массиве для последующей фильтрации
+            var lines = code.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+
+            // Удаляем все пустые строки (строки, содержащие только пробелы, табуляции и т.д.)
+            var nonEmptyLines = lines.Where(line => !string.IsNullOrWhiteSpace(line));
+
+            // Объединяем непустые строки обратно в одну строку с использованием Unix-формата переносов (\n)
+            return string.Join("\n", nonEmptyLines);
+        }
+
+        /// <summary>
         /// Применяет блок кода к Word документу.
         /// Создает параграф с моноширинным шрифтом и специальным форматированием.
         /// </summary>
