@@ -234,8 +234,8 @@
             // grpConvert
             // 
             this.grpConvert.Items.Add(this.btnConvert);
-            this.grpConvert.Items.Add(this.btnConvertMD_Doc);
             this.grpConvert.Items.Add(this.btnConvertMD_DocNotF);
+            this.grpConvert.Items.Add(this.btnConvertMD_Doc);
             this.grpConvert.Label = "Преобразование";
             this.grpConvert.Name = "grpConvert";
             // 
@@ -253,8 +253,9 @@
             // 
             // btnConvertMD_DocNotF
             // 
-            this.btnConvertMD_DocNotF.Label = "Markdown → Word (без форматирования)";
+            this.btnConvertMD_DocNotF.Label = "Word → Markdown (без форматирования)";
             this.btnConvertMD_DocNotF.Name = "btnConvertMD_DocNotF";
+            this.btnConvertMD_DocNotF.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnConvertMD_DocNotF_Click);
             // 
             // MarkdownRibbon
             // 

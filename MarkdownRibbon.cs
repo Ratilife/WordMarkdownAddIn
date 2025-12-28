@@ -255,5 +255,10 @@ namespace WordMarkdownAddIn
                 MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка");
             }
         }
+
+        private void btnConvertMD_DocNotF_Click(object sender, RibbonControlEventArgs e)
+        {
+
+        }
     }
 }
