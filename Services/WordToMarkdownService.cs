@@ -103,6 +103,9 @@ namespace WordMarkdownAddIn.Services
                     
                     if (!string.IsNullOrEmpty(markdown))
                     {
+                        // Проверяем, является ли элемент первым в документе
+                        bool isFirstElement = (i == 0);
+
                         sb.Append(markdown);
                         
                         // Добавляем переносы строк в зависимости от типа элемента и следующего элемента
@@ -118,14 +121,25 @@ namespace WordMarkdownAddIn.Services
                             {
                                 // Элементы списка идут подряд - не добавляем пустые строки
                                 // WordListItem.ToMarkdown() не добавляет перенос строки в конце
-                                sb.AppendLine();
+                                // sb.AppendLine();
+                                // Просто переходим к следующему элементу без добавления \n
                             }
-                            // Если следующий элемент - блок кода, не добавляем лишние пустые строки
+                            // Если следующий элемент - блок кода, добавляем перенос строки только если:
+                            // 1. Это не первый элемент
+                            // 2. Текущий элемент не заканчивается на перенос строки
                             else if (nextElement is WordCodeBlock)
                             {
                                 // Блоки кода уже начинаются с переноса строки в ToMarkdown()
-                                // Достаточно одного переноса строки перед блоком кода
-                                sb.AppendLine();
+                                // Добавляем перенос строки только если это не первый элемент
+                                // и текущий элемент не заканчивается на перенос строки
+                                if (!isFirstElement)
+                                {
+                                    bool endsWithNewline = markdown.EndsWith("\n") || markdown.EndsWith("\r\n");
+                                    if (!endsWithNewline)
+                                    {
+                                        sb.AppendLine();
+                                    }
+                                }
                             }
                             // Если текущий элемент - блок кода
                             else if (element is WordCodeBlock)
@@ -179,7 +193,20 @@ namespace WordMarkdownAddIn.Services
                     }
                 }
 
-                return sb.ToString().TrimEnd();
+                string result = sb.ToString().TrimEnd();
+
+                // Нормализация: убираем множественные переносы строк подряд (более 2)
+                // Заменяем 3 и более переносов строк на 2
+                while (result.Contains("\n\n\n"))
+                {
+                    result = result.Replace("\n\n\n", "\n\n");
+                }
+
+                // Убираем пустые строки в начале документа
+                result = result.TrimStart('\n', '\r');
+
+                return result;
+
             }
             catch (Exception ex)
             {
