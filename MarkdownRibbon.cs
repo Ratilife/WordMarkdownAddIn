@@ -41,8 +41,8 @@ namespace WordMarkdownAddIn
         private void btnOpen_Click(object sender, RibbonControlEventArgs e)
         {
             try
-               {
-                    ThisAddIn.PaneControl.OpenMarkdownFile();
+            {
+                ThisAddIn.PaneControl.OpenMarkdownFile();
             }
             catch (Exception ex)
             {
@@ -52,9 +52,9 @@ namespace WordMarkdownAddIn
 
         private void bBold_Click(object sender, RibbonControlEventArgs e)
         {
-           try
-               {
-                  ThisAddIn.PaneControl.InsertInline("**", "**");
+            try
+            {
+                ThisAddIn.PaneControl.InsertInline("**", "**");
             }
             catch (Exception ex)
             {
@@ -65,8 +65,8 @@ namespace WordMarkdownAddIn
         private void bItalic_Click(object sender, RibbonControlEventArgs e)
         {
             try
-                {
-                    ThisAddIn.PaneControl.InsertInline("*", "*");
+            {
+                ThisAddIn.PaneControl.InsertInline("*", "*");
             }
             catch (Exception ex)
             {
@@ -76,9 +76,9 @@ namespace WordMarkdownAddIn
 
         private void bStrike_Click(object sender, RibbonControlEventArgs e)
         {
-              try
-                {
-                  ThisAddIn.PaneControl.InsertInline("~~", "~~");
+            try
+            {
+                ThisAddIn.PaneControl.InsertInline("~~", "~~");
             }
             catch (Exception ex)
             {
@@ -89,8 +89,8 @@ namespace WordMarkdownAddIn
         private void bH1_Click(object sender, RibbonControlEventArgs e)
         {
             try
-                {
-                    ThisAddIn.PaneControl.InsertHeading(1);
+            {
+                ThisAddIn.PaneControl.InsertHeading(1);
             }
             catch (Exception ex)
             {
@@ -102,8 +102,8 @@ namespace WordMarkdownAddIn
         private void bH2_Click(object sender, RibbonControlEventArgs e)
         {
             try
-                {
-                    ThisAddIn.PaneControl.InsertHeading(2);
+            {
+                ThisAddIn.PaneControl.InsertHeading(2);
             }
             catch (Exception ex)
             {
@@ -114,8 +114,8 @@ namespace WordMarkdownAddIn
         private void bList_Click(object sender, RibbonControlEventArgs e)
         {
             try
-                {
-                    ThisAddIn.PaneControl.InsertBulletList();
+            {
+                ThisAddIn.PaneControl.InsertBulletList();
             }
             catch (Exception ex)
             {
@@ -126,8 +126,8 @@ namespace WordMarkdownAddIn
         private void bNumList_Click(object sender, RibbonControlEventArgs e)
         {
             try
-                {
-                    ThisAddIn.PaneControl.InsertNumberedList();
+            {
+                ThisAddIn.PaneControl.InsertNumberedList();
             }
             catch (Exception ex)
             {
@@ -137,9 +137,9 @@ namespace WordMarkdownAddIn
 
         private void bCheckbox_Click(object sender, RibbonControlEventArgs e)
         {
-        try                                        
-         {                                       
-        ThisAddIn.PaneControl.InsertCheckbox(false);
+            try
+            {
+                ThisAddIn.PaneControl.InsertCheckbox(false);
             }
             catch (Exception ex)
             {
@@ -149,9 +149,9 @@ namespace WordMarkdownAddIn
 
         private void bTable_Click(object sender, RibbonControlEventArgs e)
         {
-        try                                            
-        {                                            
-        ThisAddIn.PaneControl.InsertTable(3, 3);
+            try
+            {
+                ThisAddIn.PaneControl.InsertTable(3, 3);
             }
             catch (Exception ex)
             {
@@ -162,9 +162,9 @@ namespace WordMarkdownAddIn
 
         private void bLink_Click(object sender, RibbonControlEventArgs e)
         {
-        try                                                
-        {                                                
-        ThisAddIn.PaneControl.InsertLink("текст", "https://example.com");
+            try
+            {
+                ThisAddIn.PaneControl.InsertLink("текст", "https://example.com");
             }
             catch (Exception ex)
             {
@@ -187,8 +187,8 @@ namespace WordMarkdownAddIn
 
         private void bMermaid_Click(object sender, RibbonControlEventArgs e)
         {
-            try                                                        
-            {                                                        
+            try
+            {
                 ThisAddIn.PaneControl.InsertMermaidSample();
             }
             catch (Exception ex)
@@ -200,9 +200,9 @@ namespace WordMarkdownAddIn
 
         private void bCodeBlock_Click(object sender, RibbonControlEventArgs e)
         {
-            try                                                            
-            {                                                           
-            ThisAddIn.PaneControl?.InsertCodeBlock("csharp");
+            try
+            {
+                ThisAddIn.PaneControl?.InsertCodeBlock("csharp");
             }
             catch (Exception ex)
             {
@@ -213,8 +213,8 @@ namespace WordMarkdownAddIn
         private void bMath_Click(object sender, RibbonControlEventArgs e)
         {
             try
-            {                                                              
-                    ThisAddIn.PaneControl.InsertMathSample();
+            {
+                ThisAddIn.PaneControl.InsertMathSample();
             }
             catch (Exception ex)
             {
@@ -258,6 +258,35 @@ namespace WordMarkdownAddIn
 
         private void btnConvertMD_DocNotF_Click(object sender, RibbonControlEventArgs e)
         {
+            try
+            {
+                // Создаем экземпляр сервиса для извлечения текста
+                var service = new Services.WordToMarkdownPlainTextService();
+
+                // Извлекаем текстовое содержимое документа
+                string markdown = service.ExtractPlainText();
+
+                // Устанавливаем извлеченный текст в панель Markdown
+                ThisAddIn.PaneControl.SetMarkdown(markdown);
+
+                // Показываем сообщение об успешном выполнении
+                MessageBox.Show(
+                    "Текст из документа Word успешно перенесен в Markdown!",
+                    "Успех",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                // Показываем сообщение об ошибке
+                MessageBox.Show(
+                    $"Ошибка при переносе текста: {ex.Message}",
+                    "Ошибка",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
 
         }
     }
