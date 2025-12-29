@@ -33,10 +33,84 @@ namespace WordMarkdownAddIn.Services
                 // Если активного документа нет, выбрасывается исключение.
                 throw new System.Exception("Нет активного документа Word.");
             }
-
-
         }
-    
-    }        
+
+        /// <summary>
+        /// Извлекает текстовое содержимое документа Word без форматирования.
+        /// </summary>
+        /// <returns>Текстовое содержимое документа с нормализованными переносами строк.</returns>
+        public string ExtractPlainText() 
+        {
+            try
+            {
+                //Получаем текстовое содержимое документа
+                string text = _activeDoc.Content.Text;
+
+                //Нормализуем переносы строк
+                text = NormalizeLineBreaks(text);
+
+                // Нормализуем множественные пустые строки
+                text = NormalizeEmptyLines(text);
+
+                // Удаление пробельных символов и переносов строк из начала строки.
+                text = text.TrimStart('\n', '\r', ' ', '\t');
+                // Удаление пробельных символов и переносов строк из конца строки.
+                text = text.TrimEnd('\n', '\r', ' ', '\t');
+                return text;
+            }
+            catch (Exception ex) 
+            {
+                // Логируем ошибку для отладки
+                System.Diagnostics.Debug.WriteLine($"Ошибка при извлечении текста: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Нормализует переносы строк в тексте.
+        /// Заменяет все варианты переносов строк (Windows, Mac, Unix) на единый формат (\n).
+        /// </summary>
+        /// <param name="text">Исходный текст.</param>
+        /// <returns>Текст с нормализованными переносами строк.</returns>
+        private string NormalizeLineBreaks(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;    // Возврат исходного текста, если он null или пуст.
+
+            // Заменяем Windows-переносы (\r\n) на \n
+            text = text.Replace("\r\n", "\n");
+
+            // Заменяем Mac-переносы (\r) на \n
+            text = text.Replace("\r", "\n");
+
+            // Удаляем символы конца параграфа Word (\a - звонок)
+            text = text.Replace("\a", "");
+
+            return text;
+        }
+
+        /// <summary>
+        /// Нормализует множественные пустые строки подряд.
+        /// Заменяет 3 и более переносов строк подряд на максимум 2.
+        /// </summary>
+        /// <param name="text">Исходный текст.</param>
+        /// <returns>Текст с нормализованными пустыми строками.</returns>
+        private string NormalizeEmptyLines(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            // Заменяем 3 и более переносов строк подряд на 2 переноса
+            // Используем цикл while для обработки всех случаев (например, \n\n\n\n\n)
+            while (text.Contains("\n\n\n"))
+            {
+                text = text.Replace("\n\n\n", "\n\n");
+            }
+
+            return text;
+        }
+
+
+    }
 }
 
