@@ -28,7 +28,7 @@ namespace WordMarkdownAddIn.Services
             _activeDoc = _wordApp.ActiveDocument;       // Приватное поле для хранения ссылки на активный документ Word. 
 
             // Проверка, существует ли активный документ.
-            if (_activeDoc != null) 
+            if (_activeDoc == null) 
             {
                 // Если активного документа нет, выбрасывается исключение.
                 throw new System.Exception("Нет активного документа Word.");
