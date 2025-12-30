@@ -724,11 +724,58 @@ namespace WordMarkdownAddIn.Services
                 codeRange.ParagraphFormat.SpaceBefore = 6;
                 codeRange.ParagraphFormat.SpaceAfter = 6;
 
-                // Удаляем символы ```
-                string newText = element.Content;
-                codeRange.Text = newText;
+                // Удаляем маркеры ``` из начала блока кода
+                string currentText = codeRange.Text;
+                if (!string.IsNullOrEmpty(currentText))
+                {
+                    // Удаляем ``` из начала (может быть с языком: ```csharp\n)
+                    if (currentText.StartsWith("```"))
+                    {
+                        // Ищем конец первой строки (до \n)
+                        int newlinePos = currentText.IndexOf('\n');
+                        if (newlinePos > 0)
+                        {
+                            // Удаляем первую строку (```язык\n или ```\n)
+                            Range startRange = _activeDoc.Range(codeRange.Start, codeRange.Start + newlinePos + 1);
+                            startRange.Delete();
+                            // Обновляем диапазон после удаления
+                            codeRange = _activeDoc.Range(codeRange.Start, codeRange.End - (newlinePos + 1));
+                        }
+                        else
+                        {
+                            // Нет перевода строки, удаляем только ``` (3 символа)
+                            Range startRange = _activeDoc.Range(codeRange.Start, codeRange.Start + 3);
+                            startRange.Delete();
+                            codeRange = _activeDoc.Range(codeRange.Start, codeRange.End - 3);
+                        }
+                    }
 
-                // Повторно применяем форматирование
+                    // Удаляем маркеры ``` из конца блока кода
+                    string updatedText = codeRange.Text;
+                    if (!string.IsNullOrEmpty(updatedText))
+                    {
+                        if (updatedText.EndsWith("\r\n```"))
+                        {
+                            // Вариант: \r\n``` (5 символов)
+                            Range endRange = _activeDoc.Range(codeRange.End - 5, codeRange.End);
+                            endRange.Delete();
+                        }
+                        else if (updatedText.EndsWith("\n```"))
+                        {
+                            // Вариант: \n``` (4 символа)
+                            Range endRange = _activeDoc.Range(codeRange.End - 4, codeRange.End);
+                            endRange.Delete();
+                        }
+                        else if (updatedText.EndsWith("```"))
+                        {
+                            // Вариант: просто ``` (3 символа)
+                            Range endRange = _activeDoc.Range(codeRange.End - 3, codeRange.End);
+                            endRange.Delete();
+                        }
+                    }
+                }
+
+                // Повторно применяем форматирование после удаления маркеров
                 codeRange.Font.Name = "Consolas";
                 codeRange.Font.Size = 10;
                 codeRange.Shading.BackgroundPatternColor = WdColor.wdColorGray25;
@@ -736,6 +783,8 @@ namespace WordMarkdownAddIn.Services
                 codeRange.ParagraphFormat.RightIndent = 18;
                 codeRange.ParagraphFormat.SpaceBefore = 6;
                 codeRange.ParagraphFormat.SpaceAfter = 6;
+
+                Debug.WriteLine($"[FormatCodeBlock] Применено форматирование блока кода, удалены маркеры ```");
             }
             catch (Exception ex)
             {
@@ -758,9 +807,45 @@ namespace WordMarkdownAddIn.Services
                 int end = documentRange.Start + element.EndPosition;
                 Range linkRange = _activeDoc.Range(start, end);
 
-                // Заменяем текст [текст](url) на текст
-                string linkText = element.Content;
-                linkRange.Text = linkText;
+                // Удаляем маркеры [ и ] из начала и конца ссылки
+                string currentText = linkRange.Text;
+                if (!string.IsNullOrEmpty(currentText))
+                {
+                    // Удаляем [ из начала
+                    if (currentText.StartsWith("["))
+                    {
+                        Range startRange = _activeDoc.Range(linkRange.Start, linkRange.Start + 1);
+                        startRange.Delete();
+                        linkRange = _activeDoc.Range(linkRange.Start, linkRange.End - 1);
+                    }
+
+                    // Удаляем ](url) часть - ищем закрывающую скобку ]
+                    string updatedText = linkRange.Text;
+                    int closingBracketPos = updatedText.IndexOf(']');
+                    if (closingBracketPos >= 0)
+                    {
+                        // Находим позицию начала (url) части
+                        int urlStartPos = updatedText.IndexOf('(', closingBracketPos);
+                        if (urlStartPos > closingBracketPos)
+                        {
+                            // Удаляем ](url) - от ] до конца
+                            int removeLength = updatedText.Length - closingBracketPos;
+                            Range endRange = _activeDoc.Range(linkRange.Start + closingBracketPos, linkRange.End);
+                            endRange.Delete();
+                            linkRange = _activeDoc.Range(linkRange.Start, linkRange.End - removeLength);
+                        }
+                        else
+                        {
+                            // Нет (url), удаляем только ]
+                            Range endRange = _activeDoc.Range(linkRange.Start + closingBracketPos, linkRange.Start + closingBracketPos + 1);
+                            endRange.Delete();
+                            linkRange = _activeDoc.Range(linkRange.Start, linkRange.End - 1);
+                        }
+                    }
+                }
+
+                // Получаем текст ссылки (без маркеров)
+                string linkText = linkRange.Text;
 
                 // Создаем гиперссылку
                 try
@@ -782,6 +867,8 @@ namespace WordMarkdownAddIn.Services
                     linkRange.Font.Underline = WdUnderline.wdUnderlineSingle;
                     linkRange.Text = $"{linkText} ({url})";
                 }
+
+                Debug.WriteLine($"[FormatLink] Применено форматирование ссылки, удалены маркеры [ и ](url)");
             }
             catch (Exception ex)
             {
@@ -810,9 +897,36 @@ namespace WordMarkdownAddIn.Services
                 bool isOrdered = element.Metadata.ContainsKey("IsOrdered") &&
                                 (bool)element.Metadata["IsOrdered"];
 
-                // Удаляем маркер списка из текста
-                string newText = element.Content;
-                paragraph.Range.Text = newText;
+                // Удаляем маркер списка из начала текста (-, *, + или 1.)
+                string currentText = listRange.Text;
+                if (!string.IsNullOrEmpty(currentText))
+                {
+                    // Удаляем маркер из начала строки
+                    if (currentText.StartsWith("- ") || currentText.StartsWith("* ") || currentText.StartsWith("+ "))
+                    {
+                        // Маркер занимает 2 символа (-, *, или + и пробел)
+                        Range markerRange = _activeDoc.Range(listRange.Start, listRange.Start + 2);
+                        markerRange.Delete();
+                        listRange = _activeDoc.Range(listRange.Start, listRange.End - 2);
+                    }
+                    else
+                    {
+                        // Проверяем нумерованный список (1., 2., и т.д.)
+                        // Ищем паттерн: цифра(ы) + точка + пробел
+                        var match = System.Text.RegularExpressions.Regex.Match(currentText, @"^\d+\.\s");
+                        if (match.Success)
+                        {
+                            // Удаляем маркер (цифры + точка + пробел)
+                            int markerLength = match.Length;
+                            Range markerRange = _activeDoc.Range(listRange.Start, listRange.Start + markerLength);
+                            markerRange.Delete();
+                            listRange = _activeDoc.Range(listRange.Start, listRange.End - markerLength);
+                        }
+                    }
+                }
+
+                // Обновляем ссылку на параграф после удаления маркера
+                paragraph = listRange.Paragraphs[1];
 
                 // Применяем форматирование списка
                 if (isOrdered)
@@ -823,6 +937,8 @@ namespace WordMarkdownAddIn.Services
                 {
                     paragraph.Range.ListFormat.ApplyBulletDefault();
                 }
+
+                Debug.WriteLine($"[FormatListItem] Применено форматирование списка, удален маркер");
             }
             catch (Exception ex)
             {
@@ -847,9 +963,28 @@ namespace WordMarkdownAddIn.Services
                 // Получаем параграф
                 Paragraph paragraph = quoteRange.Paragraphs[1];
 
-                // Удаляем символ >
-                string newText = element.Content;
-                paragraph.Range.Text = newText;
+                // Удаляем символ > и пробел после него из начала цитаты
+                string currentText = quoteRange.Text;
+                if (!string.IsNullOrEmpty(currentText))
+                {
+                    if (currentText.StartsWith("> "))
+                    {
+                        // Удаляем "> " (2 символа)
+                        Range markerRange = _activeDoc.Range(quoteRange.Start, quoteRange.Start + 2);
+                        markerRange.Delete();
+                        quoteRange = _activeDoc.Range(quoteRange.Start, quoteRange.End - 2);
+                    }
+                    else if (currentText.StartsWith(">"))
+                    {
+                        // Удаляем только ">" (1 символ)
+                        Range markerRange = _activeDoc.Range(quoteRange.Start, quoteRange.Start + 1);
+                        markerRange.Delete();
+                        quoteRange = _activeDoc.Range(quoteRange.Start, quoteRange.End - 1);
+                    }
+                }
+
+                // Обновляем ссылку на параграф после удаления маркера
+                paragraph = quoteRange.Paragraphs[1];
 
                 // Применяем стиль цитаты
                 try
@@ -862,6 +997,8 @@ namespace WordMarkdownAddIn.Services
                     paragraph.Range.set_Style(WdBuiltinStyle.wdStyleNormal);
                     paragraph.Range.ParagraphFormat.LeftIndent = 36; // 0.5 дюйма
                 }
+
+                Debug.WriteLine($"[FormatQuote] Применено форматирование цитаты, удален маркер >");
             }
             catch (Exception ex)
             {
@@ -886,9 +1023,16 @@ namespace WordMarkdownAddIn.Services
                 int end = documentRange.Start + element.EndPosition;
                 Range tableRange = _activeDoc.Range(start, end);
 
-                // Удаляем Markdown-синтаксис таблицы
-                // В полной реализации здесь должен быть код создания таблицы Word
-                Debug.WriteLine($"[FormatTable] Упрощенная реализация - таблица не преобразована");
+                // Удаляем маркеры | из таблицы
+                string currentText = tableRange.Text;
+                if (!string.IsNullOrEmpty(currentText))
+                {
+                    // Удаляем все символы | из текста таблицы
+                    string newText = currentText.Replace("|", "");
+                    tableRange.Text = newText;
+                }
+
+                Debug.WriteLine($"[FormatTable] Упрощенная реализация - удалены маркеры |, таблица не преобразована в Word таблицу");
 
                 // Для полной реализации нужно:
                 // 1. Парсить строки таблицы (разделитель |)
@@ -921,8 +1065,27 @@ namespace WordMarkdownAddIn.Services
                 // Получаем параграф, содержащий горизонтальную линию
                 Paragraph paragraph = hrRange.Paragraphs[1];
 
-                // Очищаем текст параграфа (удаляем символы ---, *** или ___)
-                paragraph.Range.Text = "";
+                // Удаляем маркеры горизонтальной линии (---, *** или ___)
+                string currentText = hrRange.Text;
+                if (!string.IsNullOrEmpty(currentText))
+                {
+                    // Удаляем маркеры ---, *** или ___ (минимум 3 символа)
+                    string trimmedText = currentText.Trim();
+                    if (trimmedText.StartsWith("---") || trimmedText.StartsWith("***") || trimmedText.StartsWith("___"))
+                    {
+                        // Очищаем текст параграфа (оставляем пустую строку)
+                        paragraph.Range.Text = "";
+                    }
+                    else
+                    {
+                        // Если не распознали маркер, просто очищаем
+                        paragraph.Range.Text = "";
+                    }
+                }
+                else
+                {
+                    paragraph.Range.Text = "";
+                }
 
                 // Применяем границу снизу параграфа для создания визуальной линии
                 paragraph.Range.ParagraphFormat.Borders[WdBorderType.wdBorderBottom].LineStyle = WdLineStyle.wdLineStyleSingle;
@@ -933,6 +1096,8 @@ namespace WordMarkdownAddIn.Services
                 paragraph.Range.ParagraphFormat.SpaceBefore = 12;  // Отступ сверху (1 пункт)
                 paragraph.Range.ParagraphFormat.SpaceAfter = 12;   // Отступ снизу (1 пункт)
                 paragraph.Range.ParagraphFormat.Alignment = WdParagraphAlignment.wdAlignParagraphCenter;
+
+                Debug.WriteLine($"[FormatHorizontalRule] Применено форматирование горизонтальной линии, удалены маркеры ---/***/___");
             }
             catch (Exception ex)
             {

@@ -263,6 +263,7 @@
             // 
             this.btnFormatMarkdown.Label = "Форматировать Markdown";
             this.btnFormatMarkdown.Name = "btnFormatMarkdown";
+            this.btnFormatMarkdown.Visible = false;
             this.btnFormatMarkdown.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnFormatMarkdown_Click);
             // 
             // MarkdownRibbon
