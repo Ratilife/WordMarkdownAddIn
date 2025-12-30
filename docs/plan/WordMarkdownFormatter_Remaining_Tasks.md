@@ -193,3 +193,4 @@ case MarkdownElementType.HorizontalRule:
 - Обработка ошибок реализована через `LogError()` и `Debug.WriteLine()`.
 - Валидация документа реализована в `ValidateDocument()`.
 
+

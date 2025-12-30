@@ -62,6 +62,7 @@
             this.btnConvert = this.Factory.CreateRibbonButton();
             this.btnConvertMD_DocNotF = this.Factory.CreateRibbonButton();
             this.btnConvertMD_Doc = this.Factory.CreateRibbonButton();
+            this.btnFormatMarkdown = this.Factory.CreateRibbonButton();
             this.tabMarkdown.SuspendLayout();
             this.grpFile.SuspendLayout();
             this.grpFormat.SuspendLayout();
@@ -236,6 +237,7 @@
             this.grpConvert.Items.Add(this.btnConvert);
             this.grpConvert.Items.Add(this.btnConvertMD_DocNotF);
             this.grpConvert.Items.Add(this.btnConvertMD_Doc);
+            this.grpConvert.Items.Add(this.btnFormatMarkdown);
             this.grpConvert.Label = "Преобразование";
             this.grpConvert.Name = "grpConvert";
             // 
@@ -256,6 +258,12 @@
             this.btnConvertMD_Doc.Label = "Markdown → Word";
             this.btnConvertMD_Doc.Name = "btnConvertMD_Doc";
             this.btnConvertMD_Doc.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnApplyToWord_Click);
+            // 
+            // btnFormatMarkdown
+            // 
+            this.btnFormatMarkdown.Label = "Форматировать Markdown";
+            this.btnFormatMarkdown.Name = "btnFormatMarkdown";
+            this.btnFormatMarkdown.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnFormatMarkdown_Click);
             // 
             // MarkdownRibbon
             // 
@@ -307,6 +315,7 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvert;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvertMD_Doc;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvertMD_DocNotF;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton btnFormatMarkdown;
     }
 
     partial class ThisRibbonCollection

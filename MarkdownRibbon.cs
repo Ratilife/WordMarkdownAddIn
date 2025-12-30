@@ -1,4 +1,5 @@
-﻿using Microsoft.Office.Tools.Ribbon;
+﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Tools.Ribbon;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -288,6 +289,58 @@ namespace WordMarkdownAddIn
                 );
             }
 
+        }
+
+        private void btnFormatMarkdown_Click(object sender, RibbonControlEventArgs e)
+        {
+            try
+            {
+                var formatter = new Services.WordMarkdownFormatter();
+
+                // Проверяем, есть ли выделенный текст
+                Range selection = Globals.ThisAddIn?.Application?.Selection?.Range;
+                if (selection != null && !string.IsNullOrEmpty(selection.Text))
+                {
+                    // Форматируем только выделенный текст
+                    formatter.FormatSelectedText();
+                    MessageBox.Show(
+                        "Markdown-синтаксис в выделенном тексте успешно отформатирован!",
+                        "Успех",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+                }
+                else
+                {
+                    // Форматируем весь документ
+                    var result = MessageBox.Show(
+                        "Текст не выделен. Отформатировать весь документ?",
+                        "Подтверждение",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question
+                    );
+
+                    if (result == DialogResult.Yes)
+                    {
+                        formatter.FormatEntireDocument();
+                        MessageBox.Show(
+                            "Markdown-синтаксис в документе успешно отформатирован!",
+                            "Успех",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Ошибка при форматировании Markdown: {ex.Message}",
+                    "Ошибка",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
         }
     }
 }

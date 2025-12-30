@@ -904,6 +904,81 @@ namespace WordMarkdownAddIn.Services
         }
 
         /// <summary>
+        /// Применение форматирования для горизонтальной линии
+        /// </summary>
+        public void FormatHorizontalRule(MarkdownElementMatch element, Range documentRange)
+        {
+            try
+            {
+                if (element == null)
+                    return;
+
+                // Получаем диапазон горизонтальной линии в документе
+                int start = documentRange.Start + element.StartPosition;
+                int end = documentRange.Start + element.EndPosition;
+                Range hrRange = _activeDoc.Range(start, end);
+
+                // Получаем параграф, содержащий горизонтальную линию
+                Paragraph paragraph = hrRange.Paragraphs[1];
+
+                // Очищаем текст параграфа (удаляем символы ---, *** или ___)
+                paragraph.Range.Text = "";
+
+                // Применяем границу снизу параграфа для создания визуальной линии
+                paragraph.Range.ParagraphFormat.Borders[WdBorderType.wdBorderBottom].LineStyle = WdLineStyle.wdLineStyleSingle;
+                paragraph.Range.ParagraphFormat.Borders[WdBorderType.wdBorderBottom].LineWidth = WdLineWidth.wdLineWidth050pt;
+                paragraph.Range.ParagraphFormat.Borders[WdBorderType.wdBorderBottom].Color = WdColor.wdColorAutomatic;
+
+                // Устанавливаем отступы для визуального выделения
+                paragraph.Range.ParagraphFormat.SpaceBefore = 12;  // Отступ сверху (1 пункт)
+                paragraph.Range.ParagraphFormat.SpaceAfter = 12;   // Отступ снизу (1 пункт)
+                paragraph.Range.ParagraphFormat.Alignment = WdParagraphAlignment.wdAlignParagraphCenter;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[FormatHorizontalRule] Ошибка: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Удаление синтаксических маркеров Markdown из текста
+        /// </summary>
+        /// <param name="range">Диапазон текста, из которого нужно удалить синтаксис</param>
+        /// <param name="syntaxToRemove">Строка синтаксиса для удаления (например, "**", "*", "~~", "`")</param>
+        /// <returns>true если синтаксис был найден и удален, false в противном случае</returns>
+        public bool RemoveMarkdownSyntax(Range range, string syntaxToRemove)
+        {
+            try
+            {
+                if (range == null || string.IsNullOrEmpty(syntaxToRemove))
+                    return false;
+
+                // Получаем текущий текст диапазона
+                string currentText = range.Text;
+
+                if (string.IsNullOrEmpty(currentText))
+                    return false;
+
+                // Проверяем, содержит ли текст синтаксис для удаления
+                if (!currentText.Contains(syntaxToRemove))
+                    return false;
+
+                // Удаляем все вхождения синтаксиса
+                string newText = currentText.Replace(syntaxToRemove, "");
+
+                // Обновляем текст в диапазоне
+                range.Text = newText;
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RemoveMarkdownSyntax] Ошибка при удалении синтаксиса '{syntaxToRemove}': {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Логирование ошибок в процессе форматирования
         /// </summary>
         private void LogError(string message, Exception exception = null)
@@ -970,7 +1045,10 @@ namespace WordMarkdownAddIn.Services
         /// </summary>
         public WordMarkdownFormatter()
         {
-            _wordApp = Globals.ThisAddIn.Application;
+            _wordApp = Globals.ThisAddIn?.Application;
+            if (_wordApp == null)
+                throw new InvalidOperationException("Приложение Word недоступно.");
+            
             _activeDoc = _wordApp?.ActiveDocument;
 
             if (_activeDoc == null)
@@ -1332,8 +1410,7 @@ namespace WordMarkdownAddIn.Services
                         break;
 
                     case MarkdownElementType.HorizontalRule:
-                        // Горизонтальные линии можно обработать отдельно
-                        // Например, вставить разделитель или пустой параграф
+                        _elementFormatter.FormatHorizontalRule(element, documentRange);
                         break;
 
                     default:
