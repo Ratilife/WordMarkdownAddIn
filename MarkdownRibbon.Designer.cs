@@ -206,8 +206,11 @@
             // 
             // bImage
             // 
+            this.bImage.Enabled = false;
             this.bImage.Label = "Изображение";
             this.bImage.Name = "bImage";
+            this.bImage.Visible = false;
+            this.bImage.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bImage_Click);
             // 
             // bHR
             // 

@@ -355,6 +355,9 @@ namespace WordMarkdownAddIn
             }
         }
 
-        
+        private void bImage_Click(object sender, RibbonControlEventArgs e)
+        {
+
+        }
     }
 }
