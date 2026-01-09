@@ -160,6 +160,18 @@ namespace WordMarkdownAddIn
             }
         }
 
+        private void bCheckboxTrue_Click(object sender, RibbonControlEventArgs e)
+        {
+            try
+            {
+                ThisAddIn.PaneControl.InsertCheckbox(true);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}");
+            }
+        }
+
         private void bTable_Click(object sender, RibbonControlEventArgs e)
         {
             try

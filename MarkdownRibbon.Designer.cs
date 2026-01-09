@@ -51,6 +51,7 @@
             this.bList = this.Factory.CreateRibbonButton();
             this.bNumList = this.Factory.CreateRibbonButton();
             this.bCheckbox = this.Factory.CreateRibbonButton();
+            this.bCheckboxTrue = this.Factory.CreateRibbonButton();
             this.bTable = this.Factory.CreateRibbonButton();
             this.bLink = this.Factory.CreateRibbonButton();
             this.bImage = this.Factory.CreateRibbonButton();
@@ -137,6 +138,7 @@
             // 
             this.bCode.Label = "Код";
             this.bCode.Name = "bCode";
+            this.bCode.Visible = false;
             // 
             // grpInsert
             // 
@@ -146,6 +148,7 @@
             this.grpInsert.Items.Add(this.bList);
             this.grpInsert.Items.Add(this.bNumList);
             this.grpInsert.Items.Add(this.bCheckbox);
+            this.grpInsert.Items.Add(this.bCheckboxTrue);
             this.grpInsert.Items.Add(this.bTable);
             this.grpInsert.Items.Add(this.bLink);
             this.grpInsert.Items.Add(this.bImage);
@@ -188,9 +191,15 @@
             // 
             // bCheckbox
             // 
-            this.bCheckbox.Label = "Чекбокс";
+            this.bCheckbox.Label = "Чекбокс(Ложь)";
             this.bCheckbox.Name = "bCheckbox";
             this.bCheckbox.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bCheckbox_Click);
+            // 
+            // bCheckboxTrue
+            // 
+            this.bCheckboxTrue.Label = "Чекбокс(Истина)";
+            this.bCheckboxTrue.Name = "bCheckboxTrue";
+            this.bCheckboxTrue.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bCheckboxTrue_Click);
             // 
             // bTable
             // 
@@ -321,6 +330,7 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvertMD_Doc;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvertMD_DocNotF;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnFormatMarkdown;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bCheckboxTrue;
     }
 
     partial class ThisRibbonCollection
