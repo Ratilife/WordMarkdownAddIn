@@ -112,6 +112,18 @@ namespace WordMarkdownAddIn
             }
         }
 
+        private void bH3_Click(object sender, RibbonControlEventArgs e)
+        {
+            try
+            {
+                ThisAddIn.PaneControl.InsertHeading(3);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}");
+            }
+        }
+
         private void bList_Click(object sender, RibbonControlEventArgs e)
         {
             try
@@ -342,5 +354,7 @@ namespace WordMarkdownAddIn
                 );
             }
         }
+
+        
     }
 }

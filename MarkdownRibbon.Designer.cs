@@ -172,6 +172,7 @@
             // 
             this.bH3.Label = "H3";
             this.bH3.Name = "bH3";
+            this.bH3.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bH3_Click);
             // 
             // bList
             // 

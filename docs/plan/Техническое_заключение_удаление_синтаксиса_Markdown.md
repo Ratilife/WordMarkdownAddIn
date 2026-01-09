@@ -357,3 +357,5 @@ private void UpdateElementPositions(List<MarkdownElementMatch> elements, int pro
 **Автор:** AI Assistant  
 **Статус:** Требует реализации
 
+
+
