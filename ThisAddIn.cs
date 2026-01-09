@@ -207,14 +207,14 @@ namespace WordMarkdownAddIn
             catch { }
 
             // 4. Создаем панель для активного документа (если он есть)
-            try
-            {
-                if (this.Application.ActiveWindow != null)
-                {
-                    EnsurePaneForWindow(this.Application.ActiveWindow);     //Этот метод отвечает за создание и настройку панели задач (TaskPane) с редактором Markdown для текущего активного окна.
-                }
-            }
-            catch { /* Игнорируем ошибки при старте */ }
+           // try
+           // {
+           //     if (this.Application.ActiveWindow != null)
+           //     {
+           //         EnsurePaneForWindow(this.Application.ActiveWindow);     //Этот метод отвечает за создание и настройку панели задач (TaskPane) с редактором Markdown для текущего активного окна.
+           //     }
+           // }
+           // catch { /* Игнорируем ошибки при старте */ }
 
             // 4.1. Загрузить настройки для созданной панели (если она была создана)
             try
@@ -466,7 +466,7 @@ namespace WordMarkdownAddIn
                 if (Doc.Windows.Count > 0)
                 {
                     var window = Doc.Windows[1]; // Берем первое окно документа
-                    EnsurePaneForWindow(window);
+                   // EnsurePaneForWindow(window);
                 }
             }
             catch { }
@@ -499,7 +499,7 @@ namespace WordMarkdownAddIn
                 // Создаем панель для активированного окна, если её нет
                 if (Wn != null)
                 {
-                    EnsurePaneForWindow(Wn);
+                   // EnsurePaneForWindow(Wn);
                 }
             }
             catch { }
@@ -604,6 +604,26 @@ namespace WordMarkdownAddIn
         }
 
 
+        public void TogglePane()
+        {
+            var window = this.Application.ActiveWindow;
+            if (window == null) return;
+
+            // Если панели нет - создаем её
+            if (!_markdownPanes.ContainsKey(window))
+            {
+                EnsurePaneForWindow(window);
+                return; // Панель создается видимой по умолчанию
+            }
+
+            // Если панель есть - переключаем видимость
+            var pane = MarkdownPane;
+            if (pane != null)
+            {
+                pane.Visible = !pane.Visible;
+            }
+        }
+
         /// <summary>
         /// Переключает видимость настраиваемой панели задач Markdown, связанной с активным окном Word.
         /// Если панель в данный момент видима, она скрывается; если скрыта — отображается.
@@ -618,14 +638,14 @@ namespace WordMarkdownAddIn
         /// такая проверка <c>if (pane != null)</c> присутствует). Также отмечено, что не реализована
         /// связь между состоянием видимости панели и кнопкой в ленте Ribbon.
         /// </remarks>
-        public void TogglePane()
-        {
-            var pane = MarkdownPane;
-            if (pane != null)
-            {
-                pane.Visible = !pane.Visible;
-            }
-        }
+        //public void TogglePane()
+        //{
+        //    var pane = MarkdownPane;
+        //    if (pane != null)
+        //    {
+        //        pane.Visible = !pane.Visible;
+        //    }
+        //}
 
         // Вспомогательные методы для работы с Markdown конкретного документа
 
@@ -639,7 +659,7 @@ namespace WordMarkdownAddIn
         /// 1. Проверяет, является ли переданный документ <paramref name="doc"/> допустимым (не null).
         ///    Если документ null, метод возвращает null.
         /// 2. Вызывает метод <c>FindExistingPart(doc)</c>, который ищет в документе
-       /// В текущей реализации обработка исключений <c>catch { }</c> подавляет все ошибки, что затрудняет диагностику.
+        /// В текущей реализации обработка исключений <c>catch { }</c> подавляет все ошибки, что затрудняет диагностику.
         /// </remarks>
         /// <param name="doc">Объект <see cref="Word.Document"/>, из которого нужно загрузить Markdown.</param>
         /// <returns>Строку с Markdown-контентом, если он найден, или <c>null</c>, если контент отсутствует или произошла ошибка.</returns>
