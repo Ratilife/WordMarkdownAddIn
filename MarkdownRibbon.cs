@@ -223,6 +223,19 @@ namespace WordMarkdownAddIn
 
         }
 
+        private void bMermaidToImage_Click(object sender, RibbonControlEventArgs e)
+        {
+            try
+            {
+                // TODO: Реализовать преобразование Mermaid в картинку
+                MessageBox.Show("Функция преобразования Mermaid в картинку будет реализована", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}");
+            }
+        }
+
         private void bCodeBlock_Click(object sender, RibbonControlEventArgs e)
         {
             try

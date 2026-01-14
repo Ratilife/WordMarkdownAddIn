@@ -58,6 +58,7 @@
             this.bHR = this.Factory.CreateRibbonButton();
             this.bCodeBlock = this.Factory.CreateRibbonButton();
             this.bMermaid = this.Factory.CreateRibbonButton();
+            this.bMermaidToImage = this.Factory.CreateRibbonButton();
             this.bMath = this.Factory.CreateRibbonButton();
             this.grpConvert = this.Factory.CreateRibbonGroup();
             this.btnConvert = this.Factory.CreateRibbonButton();
@@ -155,6 +156,7 @@
             this.grpInsert.Items.Add(this.bHR);
             this.grpInsert.Items.Add(this.bCodeBlock);
             this.grpInsert.Items.Add(this.bMermaid);
+            this.grpInsert.Items.Add(this.bMermaidToImage);
             this.grpInsert.Items.Add(this.bMath);
             this.grpInsert.Label = "Вставка";
             this.grpInsert.Name = "grpInsert";
@@ -238,6 +240,12 @@
             this.bMermaid.Label = "Mermaid";
             this.bMermaid.Name = "bMermaid";
             this.bMermaid.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bMermaid_Click);
+            // 
+            // bMermaidToImage
+            // 
+            this.bMermaidToImage.Label = "сделать картинку из Mermaid";
+            this.bMermaidToImage.Name = "bMermaidToImage";
+            this.bMermaidToImage.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bMermaidToImage_Click);
             // 
             // bMath
             // 
@@ -324,6 +332,7 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bHR;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bCodeBlock;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bMermaid;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton bMermaidToImage;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bMath;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpConvert;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvert;
