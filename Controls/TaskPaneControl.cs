@@ -1632,6 +1632,171 @@ namespace WordMarkdownAddIn.Controls
     ";
         }
 
+        /// <summary>
+        /// Восстанавливает HTML оболочку панели после экспорта Mermaid диаграмм.
+        /// Восстанавливает markdown содержимое и переключает в HTML режим, сохраняя кнопки переключения режимов.
+        /// </summary>
+        public async Task RestoreHtmlShellAsync()
+        {
+            if (!_coreReady || _webView == null) return;
+            
+            try
+            {
+                var coreWebView2 = _webView.CoreWebView2;
+                if (coreWebView2 == null) return;
+                
+                // Сохраняем текущий markdown перед восстановлением
+                string savedMarkdown = _latestMarkdown;
+                
+                // Создаем TaskCompletionSource для ожидания завершения навигации
+                var navigationTcs = new TaskCompletionSource<bool>();
+                bool navigationCompleted = false;
+                
+                // Подписываемся на событие завершения навигации
+                void NavigationHandler(object sender, CoreWebView2NavigationCompletedEventArgs e)
+                {
+                    if (!navigationCompleted)
+                    {
+                        navigationCompleted = true;
+                        coreWebView2.NavigationCompleted -= NavigationHandler;
+                        navigationTcs.SetResult(true);
+                    }
+                }
+                
+                coreWebView2.NavigationCompleted += NavigationHandler;
+                
+                // Восстанавливаем HTML оболочку
+                var html = BuildHtmlShell();
+                coreWebView2.NavigateToString(html);
+                
+                // Ждем завершения навигации (с таймаутом 5 секунд)
+                await Task.WhenAny(navigationTcs.Task, Task.Delay(5000));
+                
+                if (!navigationCompleted)
+                {
+                    coreWebView2.NavigationCompleted -= NavigationHandler;
+                    System.Diagnostics.Debug.WriteLine("[RestoreHtmlShellAsync] Таймаут ожидания навигации");
+                }
+                
+                // Дополнительная задержка для инициализации JavaScript
+                await Task.Delay(1000);
+                
+                // Проверяем, что элементы загружены
+                var checkScript = @"
+                    (function() {
+                        var viewControls = document.querySelector('.view-controls');
+                        var editor = document.getElementById('editor');
+                        return (viewControls && editor) ? 'ready' : 'not ready';
+                    })();
+                ";
+                var checkResult = await coreWebView2.ExecuteScriptAsync(checkScript);
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Проверка готовности: {checkResult}");
+                
+                // Восстанавливаем markdown содержимое
+                if (!string.IsNullOrEmpty(savedMarkdown))
+                {
+                    SetMarkdown(savedMarkdown);
+                    await Task.Delay(800);
+                }
+                
+                // Переключаем в HTML режим
+                SetViewMode("html");
+                
+                // Функция для гарантированного отображения кнопок
+                string ensureButtonsVisibleScript = @"
+                    (function() {
+                        var viewControls = document.querySelector('.view-controls');
+                        if (viewControls) {
+                            viewControls.style.display = 'flex';
+                            viewControls.style.visibility = 'visible';
+                            viewControls.style.opacity = '1';
+                            viewControls.style.height = 'auto';
+                            viewControls.style.minHeight = '40px';
+                        }
+                        var btnSplit = document.getElementById('btn-split');
+                        var btnMarkdown = document.getElementById('btn-markdown');
+                        var btnHtml = document.getElementById('btn-html');
+                        if (btnSplit) {
+                            btnSplit.style.display = 'block';
+                            btnSplit.style.visibility = 'visible';
+                            btnSplit.style.opacity = '1';
+                        }
+                        if (btnMarkdown) {
+                            btnMarkdown.style.display = 'block';
+                            btnMarkdown.style.visibility = 'visible';
+                            btnMarkdown.style.opacity = '1';
+                        }
+                        if (btnHtml) {
+                            btnHtml.style.display = 'block';
+                            btnHtml.style.visibility = 'visible';
+                            btnHtml.style.opacity = '1';
+                        }
+                        // Переинициализируем обработчики кнопок, если функция существует
+                        if (typeof initViewModeButtons === 'function') {
+                            try {
+                                initViewModeButtons();
+                            } catch(e) {
+                                console.error('[RestoreHtmlShell] Ошибка инициализации кнопок:', e);
+                            }
+                        }
+                        var allFound = viewControls && btnSplit && btnMarkdown && btnHtml;
+                        console.log('[RestoreHtmlShell] Кнопки восстановлены:', {
+                            viewControls: viewControls ? 'найден' : 'НЕ НАЙДЕН',
+                            btnSplit: btnSplit ? 'найден' : 'НЕ НАЙДЕН',
+                            btnMarkdown: btnMarkdown ? 'найден' : 'НЕ НАЙДЕН',
+                            btnHtml: btnHtml ? 'найден' : 'НЕ НАЙДЕН',
+                            allFound: allFound
+                        });
+                        return allFound ? 'success' : 'failed';
+                    })();
+                ";
+                
+                // Первая попытка - сразу после установки режима
+                await Task.Delay(500);
+                var result1 = await coreWebView2.ExecuteScriptAsync(ensureButtonsVisibleScript);
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Первая попытка восстановления кнопок: {result1}");
+                
+                // Вторая попытка - через дополнительную задержку
+                await Task.Delay(500);
+                var result2 = await coreWebView2.ExecuteScriptAsync(ensureButtonsVisibleScript);
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Вторая попытка восстановления кнопок: {result2}");
+                
+                // Третья попытка - финальная проверка
+                await Task.Delay(300);
+                var result3 = await coreWebView2.ExecuteScriptAsync(ensureButtonsVisibleScript);
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Третья попытка восстановления кнопок: {result3}");
+                
+                // Финальная проверка видимости кнопок
+                var finalCheck = await coreWebView2.ExecuteScriptAsync(@"
+                    (function() {
+                        var viewControls = document.querySelector('.view-controls');
+                        var btnSplit = document.getElementById('btn-split');
+                        var btnMarkdown = document.getElementById('btn-markdown');
+                        var btnHtml = document.getElementById('btn-html');
+                        var allVisible = viewControls && 
+                                        viewControls.style.display !== 'none' &&
+                                        btnSplit && btnSplit.style.display !== 'none' &&
+                                        btnMarkdown && btnMarkdown.style.display !== 'none' &&
+                                        btnHtml && btnHtml.style.display !== 'none';
+                        console.log('[RestoreHtmlShell] Финальная проверка:', {
+                            viewControlsVisible: viewControls && viewControls.style.display !== 'none',
+                            btnSplitVisible: btnSplit && btnSplit.style.display !== 'none',
+                            btnMarkdownVisible: btnMarkdown && btnMarkdown.style.display !== 'none',
+                            btnHtmlVisible: btnHtml && btnHtml.style.display !== 'none',
+                            allVisible: allVisible
+                        });
+                        return allVisible ? 'all_visible' : 'some_hidden';
+                    })();
+                ");
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Финальная проверка видимости: {finalCheck}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Ошибка: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] StackTrace: {ex.StackTrace}");
+            }
+        }
+
        
     }
 }

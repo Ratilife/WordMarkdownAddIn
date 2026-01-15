@@ -461,6 +461,9 @@ namespace WordMarkdownAddIn
                         
                         progressForm.Close();
                         
+                        // Восстанавливаем HTML оболочку с кнопками переключения режимов
+                        await ThisAddIn.PaneControl.RestoreHtmlShellAsync();
+                        
                         string message = $"Экспорт завершен!\n\n" +
                                        $"Всего диаграмм: {result.TotalDiagrams}\n" +
                                        $"Успешно: {result.SuccessCount}\n" +
@@ -482,6 +485,16 @@ namespace WordMarkdownAddIn
             }
             catch (Exception ex)
             {
+                // Восстанавливаем HTML оболочку даже при ошибке
+                try
+                {
+                    await ThisAddIn.PaneControl.RestoreHtmlShellAsync();
+                }
+                catch
+                {
+                    // Игнорируем ошибки восстановления
+                }
+                
                 MessageBox.Show(
                     $"Ошибка при экспорте: {ex.Message}",
                     "Ошибка",
