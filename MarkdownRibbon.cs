@@ -1,9 +1,10 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 using Microsoft.Office.Tools.Ribbon;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace WordMarkdownAddIn
@@ -223,18 +224,6 @@ namespace WordMarkdownAddIn
 
         }
 
-        private void bMermaidToImage_Click(object sender, RibbonControlEventArgs e)
-        {
-            try
-            {
-                // TODO: Реализовать преобразование Mermaid в картинку
-                MessageBox.Show("Функция преобразования Mermaid в картинку будет реализована", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка: {ex.Message}");
-            }
-        }
 
         private void bCodeBlock_Click(object sender, RibbonControlEventArgs e)
         {
@@ -383,6 +372,123 @@ namespace WordMarkdownAddIn
         private void bImage_Click(object sender, RibbonControlEventArgs e)
         {
 
+        }
+
+        private async void btnExportMermaid_Click(object sender, RibbonControlEventArgs e)
+        {
+            try
+            {
+                string markdown = ThisAddIn.PaneControl.GetCachedMarkdown();
+                
+                if (string.IsNullOrEmpty(markdown))
+                {
+                    MessageBox.Show(
+                        "Панель markdown пуста. Нет данных для экспорта.",
+                        "Информация",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+                    return;
+                }
+                
+                var webView = ThisAddIn.PaneControl.GetWebView();
+                if (webView == null || webView.CoreWebView2 == null)
+                {
+                    MessageBox.Show(
+                        "WebView2 не готов. Подождите загрузки панели.",
+                        "Ошибка",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                    return;
+                }
+                
+                using (var folderDialog = new FolderBrowserDialog())
+                {
+                    folderDialog.Description = "Выберите папку для сохранения PNG файлов";
+                    folderDialog.ShowNewFolderButton = true;
+                    
+                    if (folderDialog.ShowDialog() != DialogResult.OK)
+                    {
+                        return;
+                    }
+                    
+                    string outputFolder = folderDialog.SelectedPath;
+                    
+                    var exportService = new Services.MermaidExportService();
+                    
+                    var diagrams = exportService.ExtractMermaidDiagrams(markdown);
+                    if (diagrams.Count == 0)
+                    {
+                        MessageBox.Show(
+                            "В markdown не найдено диаграмм Mermaid.\n\nДиаграммы должны быть в формате:\n```mermaid\n...\n```",
+                            "Информация",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+                        return;
+                    }
+                    
+                    using (var progressForm = new ProgressForm())
+                    {
+                        var cancellationTokenSource = new CancellationTokenSource();
+                        
+                        progressForm.FormClosing += (s, args) =>
+                        {
+                            if (progressForm.IsCancelled)
+                            {
+                                cancellationTokenSource.Cancel();
+                            }
+                        };
+                        
+                        progressForm.Show();
+                        
+                        var progress = new Progress<Services.ExportProgress>(p =>
+                        {
+                            if (!progressForm.IsCancelled)
+                            {
+                                progressForm.UpdateProgress(p.CurrentIndex, p.TotalCount, p.CurrentFileName);
+                            }
+                        });
+                        
+                        var result = await exportService.ExportAllDiagramsToPngAsync(
+                            markdown,
+                            webView,
+                            outputFolder,
+                            progress,
+                            cancellationTokenSource.Token
+                        );
+                        
+                        progressForm.Close();
+                        
+                        string message = $"Экспорт завершен!\n\n" +
+                                       $"Всего диаграмм: {result.TotalDiagrams}\n" +
+                                       $"Успешно: {result.SuccessCount}\n" +
+                                       $"Ошибок: {result.FailedCount}";
+                        
+                        if (result.Errors.Count > 0)
+                        {
+                            message += $"\n\nОшибки:\n{string.Join("\n", result.Errors)}";
+                        }
+                        
+                        MessageBox.Show(
+                            message,
+                            result.FailedCount == 0 ? "Успех" : "Завершено с ошибками",
+                            MessageBoxButtons.OK,
+                            result.FailedCount == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning
+                        );
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Ошибка при экспорте: {ex.Message}",
+                    "Ошибка",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
         }
     }
 }

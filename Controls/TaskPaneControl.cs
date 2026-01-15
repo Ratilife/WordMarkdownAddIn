@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -384,6 +384,11 @@ namespace WordMarkdownAddIn.Controls
         }
 
         public string GetCachedMarkdown() => _latestMarkdown;          //предоставляет мгновенный доступ к последнему известному состоянию Markdown-текста без обращения к JavaScript.
+
+        public WebView2 GetWebView()
+        {
+            return _webView;
+        }
 
         //Метод предоставляет надежный способ получения актуального Markdown-текста,используя кэш, но при необходимости запрашивая данные из JavaScript.
         /// <summary>

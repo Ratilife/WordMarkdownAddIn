@@ -1,4 +1,4 @@
-﻿namespace WordMarkdownAddIn
+namespace WordMarkdownAddIn
 {
     partial class MarkdownRibbon : Microsoft.Office.Tools.Ribbon.RibbonBase
     {
@@ -58,18 +58,20 @@
             this.bHR = this.Factory.CreateRibbonButton();
             this.bCodeBlock = this.Factory.CreateRibbonButton();
             this.bMermaid = this.Factory.CreateRibbonButton();
-            this.bMermaidToImage = this.Factory.CreateRibbonButton();
             this.bMath = this.Factory.CreateRibbonButton();
             this.grpConvert = this.Factory.CreateRibbonGroup();
             this.btnConvert = this.Factory.CreateRibbonButton();
             this.btnConvertMD_DocNotF = this.Factory.CreateRibbonButton();
             this.btnConvertMD_Doc = this.Factory.CreateRibbonButton();
             this.btnFormatMarkdown = this.Factory.CreateRibbonButton();
+            this.grpExport = this.Factory.CreateRibbonGroup();
+            this.btnExportMermaid = this.Factory.CreateRibbonButton();
             this.tabMarkdown.SuspendLayout();
             this.grpFile.SuspendLayout();
             this.grpFormat.SuspendLayout();
             this.grpInsert.SuspendLayout();
             this.grpConvert.SuspendLayout();
+            this.grpExport.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabMarkdown
@@ -79,6 +81,7 @@
             this.tabMarkdown.Groups.Add(this.grpFormat);
             this.tabMarkdown.Groups.Add(this.grpInsert);
             this.tabMarkdown.Groups.Add(this.grpConvert);
+            this.tabMarkdown.Groups.Add(this.grpExport);
             this.tabMarkdown.Label = "Markdown";
             this.tabMarkdown.Name = "tabMarkdown";
             // 
@@ -156,7 +159,6 @@
             this.grpInsert.Items.Add(this.bHR);
             this.grpInsert.Items.Add(this.bCodeBlock);
             this.grpInsert.Items.Add(this.bMermaid);
-            this.grpInsert.Items.Add(this.bMermaidToImage);
             this.grpInsert.Items.Add(this.bMath);
             this.grpInsert.Label = "Вставка";
             this.grpInsert.Name = "grpInsert";
@@ -241,12 +243,6 @@
             this.bMermaid.Name = "bMermaid";
             this.bMermaid.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bMermaid_Click);
             // 
-            // bMermaidToImage
-            // 
-            this.bMermaidToImage.Label = "сделать картинку из Mermaid";
-            this.bMermaidToImage.Name = "bMermaidToImage";
-            this.bMermaidToImage.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.bMermaidToImage_Click);
-            // 
             // bMath
             // 
             this.bMath.Label = "Формула";
@@ -287,6 +283,18 @@
             this.btnFormatMarkdown.Visible = false;
             this.btnFormatMarkdown.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnFormatMarkdown_Click);
             // 
+            // grpExport
+            // 
+            this.grpExport.Items.Add(this.btnExportMermaid);
+            this.grpExport.Label = "Экспорт";
+            this.grpExport.Name = "grpExport";
+            // 
+            // btnExportMermaid
+            // 
+            this.btnExportMermaid.Label = "Экспорт Mermaid в PNG";
+            this.btnExportMermaid.Name = "btnExportMermaid";
+            this.btnExportMermaid.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnExportMermaid_Click);
+            // 
             // MarkdownRibbon
             // 
             this.Name = "MarkdownRibbon";
@@ -303,6 +311,8 @@
             this.grpInsert.PerformLayout();
             this.grpConvert.ResumeLayout(false);
             this.grpConvert.PerformLayout();
+            this.grpExport.ResumeLayout(false);
+            this.grpExport.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -332,7 +342,6 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bHR;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bCodeBlock;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bMermaid;
-        internal Microsoft.Office.Tools.Ribbon.RibbonButton bMermaidToImage;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bMath;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpConvert;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvert;
@@ -340,6 +349,8 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnConvertMD_DocNotF;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnFormatMarkdown;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bCheckboxTrue;
+        internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpExport;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton btnExportMermaid;
     }
 
     partial class ThisRibbonCollection
