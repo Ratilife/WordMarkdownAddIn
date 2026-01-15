@@ -16,7 +16,8 @@ namespace WordMarkdownAddIn.Controls
         private readonly WebView2 _webView;
         private readonly Services.MarkdownRenderService _renderer;
         private string _latestMarkdown = string.Empty;  // Инициализация пустой строкой  Локальный кэш для быстрого доступа
-        private bool _coreReady = false;                //Сигнализирует, что WebView2 полностью инициализирован; 
+        private bool _coreReady = false;                //Сигнализирует, что WebView2 полностью инициализирован;
+        private bool _isRestoring = false;              //Флаг для предотвращения множественных вызовов восстановления 
 
         public TaskPaneControl() 
         {
@@ -1636,17 +1637,44 @@ namespace WordMarkdownAddIn.Controls
         /// Восстанавливает HTML оболочку панели после экспорта Mermaid диаграмм.
         /// Восстанавливает markdown содержимое и переключает в HTML режим, сохраняя кнопки переключения режимов.
         /// </summary>
-        public async Task RestoreHtmlShellAsync()
+        public async Task RestoreHtmlShellAsync(string markdownToRestore = null)
         {
             if (!_coreReady || _webView == null) return;
+            
+            // Предотвращаем множественные одновременные вызовы
+            if (_isRestoring)
+            {
+                System.Diagnostics.Debug.WriteLine("[RestoreHtmlShellAsync] Восстановление уже выполняется, пропускаем");
+                return;
+            }
+            
+            _isRestoring = true;
             
             try
             {
                 var coreWebView2 = _webView.CoreWebView2;
-                if (coreWebView2 == null) return;
+                if (coreWebView2 == null)
+                {
+                    _isRestoring = false;
+                    return;
+                }
                 
-                // Сохраняем текущий markdown перед восстановлением
-                string savedMarkdown = _latestMarkdown;
+                // Используем переданный markdown или текущий из кэша
+                string savedMarkdown = markdownToRestore ?? _latestMarkdown;
+                
+                // Обновляем кэш
+                if (!string.IsNullOrEmpty(savedMarkdown))
+                {
+                    _latestMarkdown = savedMarkdown;
+                }
+                
+                // Не восстанавливаем, если markdown пуст
+                if (string.IsNullOrEmpty(savedMarkdown))
+                {
+                    System.Diagnostics.Debug.WriteLine("[RestoreHtmlShellAsync] Markdown пуст, пропускаем восстановление");
+                    _isRestoring = false;
+                    return;
+                }
                 
                 // Создаем TaskCompletionSource для ожидания завершения навигации
                 var navigationTcs = new TaskCompletionSource<bool>();
@@ -1679,28 +1707,73 @@ namespace WordMarkdownAddIn.Controls
                 }
                 
                 // Дополнительная задержка для инициализации JavaScript
-                await Task.Delay(1000);
+                await Task.Delay(1500);
                 
-                // Проверяем, что элементы загружены
-                var checkScript = @"
-                    (function() {
-                        var viewControls = document.querySelector('.view-controls');
-                        var editor = document.getElementById('editor');
-                        return (viewControls && editor) ? 'ready' : 'not ready';
-                    })();
-                ";
-                var checkResult = await coreWebView2.ExecuteScriptAsync(checkScript);
-                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Проверка готовности: {checkResult}");
-                
-                // Восстанавливаем markdown содержимое
-                if (!string.IsNullOrEmpty(savedMarkdown))
+                // Проверяем, что элементы загружены (с повторными попытками)
+                bool isReady = false;
+                for (int i = 0; i < 5; i++)
                 {
-                    SetMarkdown(savedMarkdown);
-                    await Task.Delay(800);
+                    var checkScript = @"
+                        (function() {
+                            var viewControls = document.querySelector('.view-controls');
+                            var editor = document.getElementById('editor');
+                            var preview = document.getElementById('preview');
+                            return (viewControls && editor && preview) ? 'ready' : 'not ready';
+                        })();
+                    ";
+                    var checkResult = await coreWebView2.ExecuteScriptAsync(checkScript);
+                    var resultStr = checkResult?.Trim('"') ?? "";
+                    
+                    if (resultStr == "ready")
+                    {
+                        isReady = true;
+                        System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Элементы готовы после {i + 1} попытки");
+                        break;
+                    }
+                    
+                    await Task.Delay(300);
                 }
                 
-                // Переключаем в HTML режим
+                if (!isReady)
+                {
+                    System.Diagnostics.Debug.WriteLine("[RestoreHtmlShellAsync] Предупреждение: элементы не готовы, продолжаем");
+                }
+                
+                // Восстанавливаем markdown содержимое
+                // Делаем это с задержкой, чтобы убедиться что редактор готов
+                await Task.Delay(500);
+                SetMarkdown(savedMarkdown);
+                
+                // Ждем обработки markdown и рендеринга HTML
+                await Task.Delay(1500);
+                
+                // Проверяем, что markdown установлен
+                var verifyScript = @"
+                    (function() {
+                        var editor = document.getElementById('editor');
+                        if (editor && editor.value && editor.value.trim() !== '') {
+                            return 'has_content';
+                        }
+                        return 'empty';
+                    })();
+                ";
+                var verifyResult = await coreWebView2.ExecuteScriptAsync(verifyScript);
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Проверка markdown: {verifyResult}");
+                
+                // Если markdown не установлен, пробуем еще раз
+                if (verifyResult?.Contains("empty") == true)
+                {
+                    System.Diagnostics.Debug.WriteLine("[RestoreHtmlShellAsync] Markdown не установлен, повторная попытка");
+                    await Task.Delay(500);
+                    SetMarkdown(savedMarkdown);
+                    await Task.Delay(1000);
+                }
+                
+                // Переключаем в HTML режим (только один раз)
                 SetViewMode("html");
+                
+                // Ждем установки режима
+                await Task.Delay(500);
                 
                 // Функция для гарантированного отображения кнопок
                 string ensureButtonsVisibleScript = @"
@@ -1751,20 +1824,10 @@ namespace WordMarkdownAddIn.Controls
                     })();
                 ";
                 
-                // Первая попытка - сразу после установки режима
+                // Гарантируем видимость кнопок (одна попытка с достаточной задержкой)
                 await Task.Delay(500);
-                var result1 = await coreWebView2.ExecuteScriptAsync(ensureButtonsVisibleScript);
-                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Первая попытка восстановления кнопок: {result1}");
-                
-                // Вторая попытка - через дополнительную задержку
-                await Task.Delay(500);
-                var result2 = await coreWebView2.ExecuteScriptAsync(ensureButtonsVisibleScript);
-                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Вторая попытка восстановления кнопок: {result2}");
-                
-                // Третья попытка - финальная проверка
-                await Task.Delay(300);
-                var result3 = await coreWebView2.ExecuteScriptAsync(ensureButtonsVisibleScript);
-                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Третья попытка восстановления кнопок: {result3}");
+                var result = await coreWebView2.ExecuteScriptAsync(ensureButtonsVisibleScript);
+                System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Восстановление кнопок: {result}");
                 
                 // Финальная проверка видимости кнопок
                 var finalCheck = await coreWebView2.ExecuteScriptAsync(@"
@@ -1794,6 +1857,10 @@ namespace WordMarkdownAddIn.Controls
             {
                 System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] Ошибка: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"[RestoreHtmlShellAsync] StackTrace: {ex.StackTrace}");
+            }
+            finally
+            {
+                _isRestoring = false;
             }
         }
 

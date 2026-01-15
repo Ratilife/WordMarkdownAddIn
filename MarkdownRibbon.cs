@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using Tasks = System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WordMarkdownAddIn
@@ -378,6 +380,17 @@ namespace WordMarkdownAddIn
         {
             try
             {
+                if (ThisAddIn.PaneControl == null)
+                {
+                    MessageBox.Show(
+                        "Панель управления не инициализирована.",
+                        "Ошибка",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                    return;
+                }
+                
                 string markdown = ThisAddIn.PaneControl.GetCachedMarkdown();
                 
                 if (string.IsNullOrEmpty(markdown))
@@ -401,6 +414,55 @@ namespace WordMarkdownAddIn
                         MessageBoxIcon.Error
                     );
                     return;
+                }
+                
+                // Переключаем панель в HTML режим перед экспортом
+                ThisAddIn.PaneControl.SetViewMode("html");
+                await Tasks.Task.Delay(300); // Даем время на переключение режима
+                
+                // Убеждаемся, что кнопки видимы
+                if (webView != null)
+                {
+                    var script = @"
+                        (function() {
+                            var viewControls = document.querySelector('.view-controls');
+                            if (viewControls) {
+                                viewControls.style.display = 'flex';
+                                viewControls.style.visibility = 'visible';
+                            }
+                            var btnSplit = document.getElementById('btn-split');
+                            var btnMarkdown = document.getElementById('btn-markdown');
+                            var btnHtml = document.getElementById('btn-html');
+                            if (btnSplit) btnSplit.style.display = 'block';
+                            if (btnMarkdown) btnMarkdown.style.display = 'block';
+                            if (btnHtml) btnHtml.style.display = 'block';
+                        })();
+                    ";
+                    
+                    if (webView.InvokeRequired)
+                    {
+                        var tcs = new Tasks.TaskCompletionSource<object>();
+                        webView.BeginInvoke(new Action(async () =>
+                        {
+                            try
+                            {
+                                if (webView.CoreWebView2 != null)
+                                {
+                                    await webView.CoreWebView2.ExecuteScriptAsync(script);
+                                }
+                                tcs.SetResult(null);
+                            }
+                            catch (Exception ex)
+                            {
+                                tcs.SetException(ex);
+                            }
+                        }));
+                        await tcs.Task;
+                    }
+                    else if (webView.CoreWebView2 != null)
+                    {
+                        await webView.CoreWebView2.ExecuteScriptAsync(script);
+                    }
                 }
                 
                 using (var folderDialog = new FolderBrowserDialog())
@@ -461,8 +523,12 @@ namespace WordMarkdownAddIn
                         
                         progressForm.Close();
                         
-                        // Восстанавливаем HTML оболочку с кнопками переключения режимов
-                        await ThisAddIn.PaneControl.RestoreHtmlShellAsync();
+                        // Восстанавливаем панель в HTML режиме с кнопками и диаграммой
+                        // RestoreHtmlShellAsync уже переключает панель в HTML режим
+                        if (ThisAddIn.PaneControl != null)
+                        {
+                            await ThisAddIn.PaneControl.RestoreHtmlShellAsync(markdown);
+                        }
                         
                         string message = $"Экспорт завершен!\n\n" +
                                        $"Всего диаграмм: {result.TotalDiagrams}\n" +
@@ -488,7 +554,14 @@ namespace WordMarkdownAddIn
                 // Восстанавливаем HTML оболочку даже при ошибке
                 try
                 {
-                    await ThisAddIn.PaneControl.RestoreHtmlShellAsync();
+                    if (ThisAddIn.PaneControl != null)
+                    {
+                        string markdown = ThisAddIn.PaneControl.GetCachedMarkdown();
+                        await ThisAddIn.PaneControl.RestoreHtmlShellAsync(markdown);
+                        
+                        // Убеждаемся, что панель в HTML режиме
+                        ThisAddIn.PaneControl.SetViewMode("html");
+                    }
                 }
                 catch
                 {
