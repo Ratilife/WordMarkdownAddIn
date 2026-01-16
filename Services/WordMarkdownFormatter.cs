@@ -1,4 +1,4 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -1204,6 +1204,7 @@ namespace WordMarkdownAddIn.Services
         private readonly MarkdownElementFormatter _elementFormatter;
         private readonly List<MarkdownElementType> _processingOrder;
         private bool _isProcessing = false;
+        private FormattingProgressManager _progressManager;
 
         /// <summary>
         /// Конструктор класса WordMarkdownFormatter
@@ -1237,6 +1238,8 @@ namespace WordMarkdownAddIn.Services
                 MarkdownElementType.InlineCode,
                 MarkdownElementType.HorizontalRule  // В конце горизонтальные линии
             };
+
+            _progressManager = new FormattingProgressManager(7);
         }
 
         /// <summary>
@@ -1251,6 +1254,7 @@ namespace WordMarkdownAddIn.Services
                 return;
             }
 
+            _progressManager?.StartOperation("Форматирование Markdown в Word");
             try
             {
                 _isProcessing = true;
@@ -1260,6 +1264,7 @@ namespace WordMarkdownAddIn.Services
                 {
                     return;
                 }
+                _progressManager?.UpdateProgress(10, "Проверка документа...");
 
                 // Определение диапазона обработки
                 Range rangeToProcess = targetRange ?? _activeDoc.Content;
@@ -1278,6 +1283,8 @@ namespace WordMarkdownAddIn.Services
                     return;
                 }
 
+                _progressManager?.UpdateProgress(15, "Подготовка к обработке...");
+
                 // Поиск всех элементов Markdown
                 var elements = FindAllMarkdownElements(rangeToProcess);
 
@@ -1287,6 +1294,8 @@ namespace WordMarkdownAddIn.Services
                     return;
                 }
 
+                _progressManager?.UpdateProgress(30, $"Найдено {elements.Count} элементов...");
+
                 // Сортировка элементов по приоритету обработки
                 var sortedElements = elements.OrderBy(e =>
                 {
@@ -1294,14 +1303,22 @@ namespace WordMarkdownAddIn.Services
                     return priority >= 0 ? priority : int.MaxValue;
                 }).ToList();
 
+                _progressManager?.UpdateProgress(40, "Сортировка элементов...");
+
                 // Применение форматирования к каждому элементу
                 // ВАЖНО: Обрабатываем в обратном порядке (с конца к началу),
                 // чтобы позиции не сдвигались при удалении синтаксиса
+                int processed = 0;
+                int total = sortedElements.Count;
                 foreach (var element in sortedElements.OrderByDescending(e => e.StartPosition))
                 {
                     ApplyFormattingToElement(element, rangeToProcess);
+                    processed++;
+                    int progress = 40 + (int)((double)processed / total * 50);
+                    _progressManager?.UpdateProgress(progress, $"Обработано {processed} из {total}...");
                 }
 
+                _progressManager?.UpdateProgress(100, "Завершено");
                 Debug.WriteLine($"[FormatMarkdownInWord] Обработано {sortedElements.Count} элементов Markdown.");
             }
             catch (Exception ex)
@@ -1311,6 +1328,7 @@ namespace WordMarkdownAddIn.Services
             finally
             {
                 ResetProcessingState();
+                _progressManager?.CompleteOperation();
             }
         }
 

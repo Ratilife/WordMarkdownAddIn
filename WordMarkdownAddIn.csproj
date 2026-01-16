@@ -257,7 +257,14 @@
     <Compile Include="Services\WordMarkdownFormatter.cs" />
     <Compile Include="Services\WordToMarkdownPlainTextService.cs" />
     <Compile Include="Services\WordToMarkdownService.cs" />
+    <Compile Include="Services\FormattingProgressManager.cs" />
     <Compile Include="Services\MermaidExportService.cs" />
+    <Compile Include="Forms\ProgressWindow.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\ProgressWindow.Designer.cs">
+      <DependentUpon>ProgressWindow.cs</DependentUpon>
+    </Compile>
     <Compile Include="ProgressForm.cs">
       <SubType>Form</SubType>
     </Compile>

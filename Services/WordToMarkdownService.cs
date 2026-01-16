@@ -1,4 +1,4 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -27,6 +27,7 @@ namespace WordMarkdownAddIn.Services
 
         private readonly Application _wordApp;
         private readonly Document _activeDoc;
+        private FormattingProgressManager _progressManager;
 
         public WordToMarkdownService() 
         {
@@ -35,6 +36,8 @@ namespace WordMarkdownAddIn.Services
 
             if (_activeDoc == null)
                 throw new System.Exception("Нет активного документа Word.");
+
+            _progressManager = new FormattingProgressManager(7);
         }
 
         public string ExtractDocumentContent()
@@ -82,17 +85,23 @@ namespace WordMarkdownAddIn.Services
         /// <returns>Строка с Markdown-представлением документа.</returns>
         public string ConvertToMarkdown()
         {
+            _progressManager?.StartOperation("Преобразование Word в Markdown");
             try
             {
+                _progressManager?.UpdateProgress(10, "Извлечение структуры документа...");
+
                 // Извлекаем структуру документа
                 var elements = ExtractDocumentStructure();
                 
                 if (elements == null || elements.Count == 0)
                     return "";
 
+                _progressManager?.UpdateProgress(30, $"Найдено {elements.Count} элементов...");
+
                 var sb = new StringBuilder();
                 
                 // Проходим по всем элементам и преобразуем их в Markdown
+                int total = elements.Count;
                 for (int i = 0; i < elements.Count; i++)
                 {
                     var element = elements[i];
@@ -107,6 +116,9 @@ namespace WordMarkdownAddIn.Services
                         bool isFirstElement = (i == 0);
 
                         sb.Append(markdown);
+
+                        int progress = 30 + (int)((double)(i + 1) / total * 60);
+                        _progressManager?.UpdateProgress(progress, $"Преобразовано {i + 1} из {total} элементов...");
                         
                         // Добавляем переносы строк в зависимости от типа элемента и следующего элемента
                         bool isLastElement = (i == elements.Count - 1);
@@ -205,6 +217,8 @@ namespace WordMarkdownAddIn.Services
                 // Убираем пустые строки в начале документа
                 result = result.TrimStart('\n', '\r');
 
+                _progressManager?.UpdateProgress(100, "Завершено");
+
                 return result;
 
             }
@@ -213,6 +227,10 @@ namespace WordMarkdownAddIn.Services
                 // В случае ошибки возвращаем пустую строку или можно логировать ошибку
                 System.Diagnostics.Debug.WriteLine($"Ошибка при преобразовании в Markdown: {ex.Message}");
                 return "";
+            }
+            finally
+            {
+                _progressManager?.CompleteOperation();
             }
         }
         

@@ -390,7 +390,7 @@ namespace WordMarkdownAddIn
                     );
                     return;
                 }
-                
+
                 string markdown = ThisAddIn.PaneControl.GetCachedMarkdown();
                 
                 if (string.IsNullOrEmpty(markdown))
@@ -414,55 +414,6 @@ namespace WordMarkdownAddIn
                         MessageBoxIcon.Error
                     );
                     return;
-                }
-                
-                // Переключаем панель в HTML режим перед экспортом
-                ThisAddIn.PaneControl.SetViewMode("html");
-                await Tasks.Task.Delay(300); // Даем время на переключение режима
-                
-                // Убеждаемся, что кнопки видимы
-                if (webView != null)
-                {
-                    var script = @"
-                        (function() {
-                            var viewControls = document.querySelector('.view-controls');
-                            if (viewControls) {
-                                viewControls.style.display = 'flex';
-                                viewControls.style.visibility = 'visible';
-                            }
-                            var btnSplit = document.getElementById('btn-split');
-                            var btnMarkdown = document.getElementById('btn-markdown');
-                            var btnHtml = document.getElementById('btn-html');
-                            if (btnSplit) btnSplit.style.display = 'block';
-                            if (btnMarkdown) btnMarkdown.style.display = 'block';
-                            if (btnHtml) btnHtml.style.display = 'block';
-                        })();
-                    ";
-                    
-                    if (webView.InvokeRequired)
-                    {
-                        var tcs = new Tasks.TaskCompletionSource<object>();
-                        webView.BeginInvoke(new Action(async () =>
-                        {
-                            try
-                            {
-                                if (webView.CoreWebView2 != null)
-                                {
-                                    await webView.CoreWebView2.ExecuteScriptAsync(script);
-                                }
-                                tcs.SetResult(null);
-                            }
-                            catch (Exception ex)
-                            {
-                                tcs.SetException(ex);
-                            }
-                        }));
-                        await tcs.Task;
-                    }
-                    else if (webView.CoreWebView2 != null)
-                    {
-                        await webView.CoreWebView2.ExecuteScriptAsync(script);
-                    }
                 }
                 
                 using (var folderDialog = new FolderBrowserDialog())
@@ -505,7 +456,7 @@ namespace WordMarkdownAddIn
                         
                         progressForm.Show();
                         
-                        var progress = new Progress<Services.ExportProgress>(p =>
+                        var progress = new Progress<Services.MermaidExportService.ExportProgress>(p =>
                         {
                             if (!progressForm.IsCancelled)
                             {
@@ -523,11 +474,14 @@ namespace WordMarkdownAddIn
                         
                         progressForm.Close();
                         
-                        // Восстанавливаем панель в HTML режиме с кнопками и диаграммой
-                        // RestoreHtmlShellAsync уже переключает панель в HTML режим
-                        if (ThisAddIn.PaneControl != null)
+                        // Восстановление панели после экспорта
+                        try
                         {
                             await ThisAddIn.PaneControl.RestoreHtmlShellAsync(markdown);
+                        }
+                        catch (Exception restoreEx)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[btnExportMermaid] Ошибка восстановления панели: {restoreEx.Message}");
                         }
                         
                         string message = $"Экспорт завершен!\n\n" +
@@ -551,23 +505,6 @@ namespace WordMarkdownAddIn
             }
             catch (Exception ex)
             {
-                // Восстанавливаем HTML оболочку даже при ошибке
-                try
-                {
-                    if (ThisAddIn.PaneControl != null)
-                    {
-                        string markdown = ThisAddIn.PaneControl.GetCachedMarkdown();
-                        await ThisAddIn.PaneControl.RestoreHtmlShellAsync(markdown);
-                        
-                        // Убеждаемся, что панель в HTML режиме
-                        ThisAddIn.PaneControl.SetViewMode("html");
-                    }
-                }
-                catch
-                {
-                    // Игнорируем ошибки восстановления
-                }
-                
                 MessageBox.Show(
                     $"Ошибка при экспорте: {ex.Message}",
                     "Ошибка",

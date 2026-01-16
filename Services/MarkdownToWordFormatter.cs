@@ -20,6 +20,7 @@ namespace WordMarkdownAddIn.Services
         private readonly Application _wordApp;
         private readonly Document _activeDoc;
         private readonly MarkdownPipeline _pipeline;
+        private FormattingProgressManager _progressManager;
 
         public MarkdownToWordFormatter() 
         {
@@ -29,6 +30,7 @@ namespace WordMarkdownAddIn.Services
                 .UseAdvancedExtensions()
                 .UsePipeTables()
                 .Build();
+            _progressManager = new FormattingProgressManager(7);
         }
 
         private WordFormattedText ConvertInlineToWordFormattedText(ContainerInline inline)
@@ -669,86 +671,116 @@ namespace WordMarkdownAddIn.Services
         // с форматированием
         public void ApplyMarkdownToWord(string markdown) 
         {
-            System.Diagnostics.Debug.WriteLine("=== [ApplyMarkdownToWord] НАЧАЛО ===");
-            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Длина markdown: {markdown?.Length ?? 0}");
-            if (markdown != null)
+            _progressManager?.StartOperation("Применение Markdown к Word");
+            try
             {
-                int length = Math.Min(500, markdown.Length);
-                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Первые {length} символов markdown:\n{markdown.Substring(0, length)}");
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("[ApplyMarkdownToWord] markdown равен null");
-            }
-
-            // 1. Парсим Markdown через Markdig
-            var document = Markdown.Parse(markdown, _pipeline);
-            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Markdown распарсен, количество блоков: {document.Count}");
-
-            // Очищаем документ перед вставкой нового контента
-            _activeDoc.Content.Delete();
-
-            // Удаляем оставшийся пустой параграф после Delete()
-            // Word всегда оставляет один пустой параграф, его нужно удалить
-            if (_activeDoc.Content.Paragraphs.Count > 0)
-            {
-                var lastParagraph = _activeDoc.Content.Paragraphs[_activeDoc.Content.Paragraphs.Count];
-                // Проверяем, что параграф действительно пустой (только символ конца параграфа)
-                string paragraphText = lastParagraph.Range.Text.TrimEnd('\r', '\a');
-                if (string.IsNullOrEmpty(paragraphText))
+                System.Diagnostics.Debug.WriteLine("=== [ApplyMarkdownToWord] НАЧАЛО ===");
+                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Длина markdown: {markdown?.Length ?? 0}");
+                if (markdown != null)
                 {
-                    lastParagraph.Range.Delete();
-                }
-            }
-
-            // 2. Преобразуем в коллекцию IWordElement
-            var elements = new List<IWordElement>();
-            int blockIndex = 0;
-            foreach(var block in document)
-            {
-                blockIndex++;
-                string blockType = block?.GetType().Name ?? "null";
-                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Блок #{blockIndex}: {blockType}");
-
-                // Списки обрабатываем отдельно, так как они могут содержать несколько элементов
-                if (block is ListBlock listBlock)
-                {
-                    var listItems = ProcessListItems(listBlock);
-                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Добавлено элементов списка: {listItems.Count}");
-                    elements.AddRange(listItems);
+                    int length = Math.Min(500, markdown.Length);
+                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Первые {length} символов markdown:\n{markdown.Substring(0, length)}");
                 }
                 else
                 {
-                    IWordElement element = ProcessBlock(block);
-                    if(element != null)
+                    System.Diagnostics.Debug.WriteLine("[ApplyMarkdownToWord] markdown равен null");
+                }
+
+                _progressManager?.UpdateProgress(10, "Парсинг Markdown...");
+
+                // 1. Парсим Markdown через Markdig
+                var document = Markdown.Parse(markdown, _pipeline);
+                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Markdown распарсен, количество блоков: {document.Count}");
+
+                _progressManager?.UpdateProgress(20, "Очистка документа...");
+
+                // Очищаем документ перед вставкой нового контента
+                _activeDoc.Content.Delete();
+
+                // Удаляем оставшийся пустой параграф после Delete()
+                // Word всегда оставляет один пустой параграф, его нужно удалить
+                if (_activeDoc.Content.Paragraphs.Count > 0)
+                {
+                    var lastParagraph = _activeDoc.Content.Paragraphs[_activeDoc.Content.Paragraphs.Count];
+                    // Проверяем, что параграф действительно пустой (только символ конца параграфа)
+                    string paragraphText = lastParagraph.Range.Text.TrimEnd('\r', '\a');
+                    if (string.IsNullOrEmpty(paragraphText))
                     {
-                        System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Элемент добавлен: {element.GetType().Name}, ElementType: {element.ElementType}");
-                        elements.Add(element);
+                        lastParagraph.Range.Delete();
+                    }
+                }
+
+                _progressManager?.UpdateProgress(30, "Преобразование элементов...");
+
+                // 2. Преобразуем в коллекцию IWordElement
+                var elements = new List<IWordElement>();
+                int blockIndex = 0;
+                int totalBlocks = document.Count;
+                foreach(var block in document)
+                {
+                    blockIndex++;
+                    string blockType = block?.GetType().Name ?? "null";
+                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Блок #{blockIndex}: {blockType}");
+
+                    // Списки обрабатываем отдельно, так как они могут содержать несколько элементов
+                    if (block is ListBlock listBlock)
+                    {
+                        var listItems = ProcessListItems(listBlock);
+                        System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Добавлено элементов списка: {listItems.Count}");
+                        elements.AddRange(listItems);
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] ВНИМАНИЕ: ProcessBlock вернул null для блока типа {blockType}");
+                        IWordElement element = ProcessBlock(block);
+                        if(element != null)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Элемент добавлен: {element.GetType().Name}, ElementType: {element.ElementType}");
+                            elements.Add(element);
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] ВНИМАНИЕ: ProcessBlock вернул null для блока типа {blockType}");
+                        }
                     }
+
+                    int progress = 30 + (int)((double)blockIndex / totalBlocks * 30);
+                    _progressManager?.UpdateProgress(progress, $"Обработано блоков: {blockIndex} из {totalBlocks}...");
                 }
+
+                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Всего элементов создано: {elements.Count}");
+
+                _progressManager?.UpdateProgress(60, "Применение форматирования...");
+
+                // 3. Применяем все элементы к Word
+                int elementIndex = 0;
+                int totalElements = elements.Count;
+                foreach(var element in elements)
+                {
+                    elementIndex++;
+                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Применение элемента #{elementIndex}: {element.GetType().Name}, ElementType: {element.ElementType}");
+                    try
+                    {
+                        element.ApplyToWord(_activeDoc);
+                        System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Элемент #{elementIndex} успешно применен");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] ОШИБКА при применении элемента #{elementIndex}: {ex.Message}\n{ex.StackTrace}");
+                    }
+
+                    int progress = 60 + (int)((double)elementIndex / totalElements * 40);
+                    _progressManager?.UpdateProgress(progress, $"Применено элементов: {elementIndex} из {totalElements}...");
+                }
+
+                _progressManager?.UpdateProgress(100, "Завершено");
             }
-
-            System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Всего элементов создано: {elements.Count}");
-
-            // 3. Применяем все элементы к Word
-            int elementIndex = 0;
-            foreach(var element in elements)
+            catch (Exception ex)
             {
-                elementIndex++;
-                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Применение элемента #{elementIndex}: {element.GetType().Name}, ElementType: {element.ElementType}");
-                try
-                {
-                    element.ApplyToWord(_activeDoc);
-                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Элемент #{elementIndex} успешно применен");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] ОШИБКА при применении элемента #{elementIndex}: {ex.Message}\n{ex.StackTrace}");
-                }
+                System.Diagnostics.Debug.WriteLine($"[ApplyMarkdownToWord] Критическая ошибка: {ex.Message}\n{ex.StackTrace}");
+            }
+            finally
+            {
+                _progressManager?.CompleteOperation();
             }
         }
         // без форматирования
