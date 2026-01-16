@@ -54,6 +54,18 @@ namespace WordMarkdownAddIn
             }
         }
 
+        private void btnFullscreen_Click(object sender, RibbonControlEventArgs e)
+        {
+            try
+            {
+                Globals.ThisAddIn.ToggleFullscreenPane();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}");
+            }
+        }
+
         private void bBold_Click(object sender, RibbonControlEventArgs e)
         {
             try

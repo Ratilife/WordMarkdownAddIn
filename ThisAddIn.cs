@@ -80,7 +80,20 @@ namespace WordMarkdownAddIn
         /// редактора Markdown в открытых документах Word, обеспечивая независимую
         /// работу с Markdown в каждом активном окне.
         /// </remarks>
-        private static Dictionary<Word.Window, Controls.TaskPaneControl> _paneControls = new Dictionary<Word.Window, Controls.TaskPaneControl>();   // Работа с содержимым (получение/установка Markdown, вставка элементов) 
+        private static Dictionary<Word.Window, Controls.TaskPaneControl> _paneControls = new Dictionary<Word.Window, Controls.TaskPaneControl>();   // Работа с содержимым (получение/установка Markdown, вставка элементов)
+
+        /// <summary>
+        /// Ссылка на окно Markdown Editor, если оно открыто.
+        /// </summary>
+        private static Forms.MarkdownWindow _markdownWindow = null;
+
+        /// <summary>
+        /// Обнуляет ссылку на окно Markdown Editor.
+        /// </summary>
+        public static void ClearMarkdownWindow()
+        {
+            _markdownWindow = null;
+        }
 
         // Статические свойства для обратной совместимости - возвращают панель для активного документа
 
@@ -289,7 +302,28 @@ namespace WordMarkdownAddIn
                         var firstPane = _markdownPanes.Values.First();
                         this.Properties["PaneWidth"] = firstPane.Width;     // Сохранили ширину
                         this.Properties["PaneVisible"] = firstPane.Visible; // Сохранили видимость
-                }
+                    }
+                    
+                    // Сохраняем состояние окна Markdown Editor, если оно открыто
+                    if (_markdownWindow != null && !_markdownWindow.IsDisposed)
+                    {
+                        SaveMarkdownWindowState(_markdownWindow);
+                        
+                        // Синхронизируем содержимое обратно в панель перед закрытием
+                        var paneControl = PaneControl;
+                        if (paneControl != null)
+                        {
+                            string windowMarkdown = _markdownWindow.GetMarkdown();
+                            if (!string.IsNullOrEmpty(windowMarkdown))
+                            {
+                                paneControl.SetMarkdown(windowMarkdown);
+                            }
+                        }
+                        
+                        // Закрываем окно
+                        _markdownWindow.Close();
+                        _markdownWindow = null;
+                    }
                 
 
             }
@@ -399,6 +433,18 @@ namespace WordMarkdownAddIn
                 else
                 {
                     pane.Width = 600;
+                }
+
+                // Восстанавливаем полноэкранный режим, если был включен
+                bool isFullscreen = false;
+                if (Properties.ContainsKey("IsFullscreen"))
+                {
+                    bool.TryParse(Properties["IsFullscreen"].ToString(), out isFullscreen);
+                }
+                if (isFullscreen)
+                {
+                    int maxWidth = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea.Width;
+                    pane.Width = maxWidth;
                 }
 
                 // Восстанавливаем видимость, если сохранена
@@ -621,6 +667,128 @@ namespace WordMarkdownAddIn
             if (pane != null)
             {
                 pane.Visible = !pane.Visible;
+            }
+        }
+
+        /// <summary>
+        /// Переключает между панелью Markdown и отдельным окном Markdown Editor.
+        /// При открытии окна панель скрывается, при закрытии окна панель показывается обратно.
+        /// </summary>
+        /// <remarks>
+        /// Метод проверяет, открыто ли окно Markdown Editor, и переключает между панелью и окном.
+        /// Содержимое синхронизируется между панелью и окном при переключении.
+        /// </remarks>
+        public void ToggleFullscreenPane()
+        {
+            try
+            {
+                var pane = MarkdownPane;
+                if (pane == null) return;
+
+                // Проверяем, открыто ли окно
+                bool isWindowOpen = _markdownWindow != null && !_markdownWindow.IsDisposed;
+
+                if (!isWindowOpen)
+                {
+                    // Открываем окно
+                    // Скрываем панель
+                    pane.Visible = false;
+
+                    // Получаем текущее содержимое из панели
+                    string markdown = string.Empty;
+                    var paneControl = PaneControl;
+                    if (paneControl != null)
+                    {
+                        markdown = paneControl.GetCachedMarkdown() ?? string.Empty;
+                    }
+
+                    // Создаем и показываем окно
+                    _markdownWindow = new Forms.MarkdownWindow();
+                    
+                    // Восстанавливаем размер и позицию окна, если сохранены
+                    RestoreWindowState(_markdownWindow);
+                    
+                    // Синхронизируем содержимое
+                    _markdownWindow.SetMarkdown(markdown);
+                    
+                    // Показываем окно
+                    _markdownWindow.Show();
+                }
+                else
+                {
+                    // Закрываем окно
+                    if (_markdownWindow != null)
+                    {
+                        // Синхронизируем содержимое обратно в панель перед закрытием
+                        var paneControl = PaneControl;
+                        if (paneControl != null)
+                        {
+                            string windowMarkdown = _markdownWindow.GetMarkdown();
+                            if (!string.IsNullOrEmpty(windowMarkdown))
+                            {
+                                paneControl.SetMarkdown(windowMarkdown);
+                            }
+                        }
+                        
+                        _markdownWindow.Close();
+                        _markdownWindow = null;
+                    }
+                    
+                    // Показываем панель
+                    pane.Visible = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in ToggleFullscreenPane: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Восстанавливает размер и позицию окна Markdown Editor из сохраненных настроек.
+        /// </summary>
+        private void RestoreWindowState(Forms.MarkdownWindow window)
+        {
+            try
+            {
+                if (Properties.ContainsKey("MarkdownWindowWidth") && Properties.ContainsKey("MarkdownWindowHeight"))
+                {
+                    int width = (int)Properties["MarkdownWindowWidth"];
+                    int height = (int)Properties["MarkdownWindowHeight"];
+                    window.Size = new System.Drawing.Size(width, height);
+                }
+
+                if (Properties.ContainsKey("MarkdownWindowLeft") && Properties.ContainsKey("MarkdownWindowTop"))
+                {
+                    int left = (int)Properties["MarkdownWindowLeft"];
+                    int top = (int)Properties["MarkdownWindowTop"];
+                    window.Location = new System.Drawing.Point(left, top);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error restoring window state: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Сохраняет размер и позицию окна Markdown Editor.
+        /// </summary>
+        public void SaveMarkdownWindowState(Forms.MarkdownWindow window)
+        {
+            try
+            {
+                if (window != null && !window.IsDisposed)
+                {
+                    Properties["MarkdownWindowWidth"] = window.Width;
+                    Properties["MarkdownWindowHeight"] = window.Height;
+                    Properties["MarkdownWindowLeft"] = window.Left;
+                    Properties["MarkdownWindowTop"] = window.Top;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving window state: {ex.Message}");
             }
         }
 

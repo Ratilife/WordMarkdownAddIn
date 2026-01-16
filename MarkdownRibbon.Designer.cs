@@ -39,6 +39,7 @@ namespace WordMarkdownAddIn
             this.btnSave = this.Factory.CreateRibbonButton();
             this.btnPanel = this.Factory.CreateRibbonButton();
             this.btnOpen = this.Factory.CreateRibbonButton();
+            this.btnFullscreen = this.Factory.CreateRibbonButton();
             this.grpFormat = this.Factory.CreateRibbonGroup();
             this.bBold = this.Factory.CreateRibbonButton();
             this.bItalic = this.Factory.CreateRibbonButton();
@@ -90,6 +91,7 @@ namespace WordMarkdownAddIn
             this.grpFile.Items.Add(this.btnSave);
             this.grpFile.Items.Add(this.btnPanel);
             this.grpFile.Items.Add(this.btnOpen);
+            this.grpFile.Items.Add(this.btnFullscreen);
             this.grpFile.Label = "Файл";
             this.grpFile.Name = "grpFile";
             // 
@@ -110,6 +112,12 @@ namespace WordMarkdownAddIn
             this.btnOpen.Label = "Открыть .md";
             this.btnOpen.Name = "btnOpen";
             this.btnOpen.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnOpen_Click);
+            // 
+            // btnFullscreen
+            // 
+            this.btnFullscreen.Label = "Растянуть панель";
+            this.btnFullscreen.Name = "btnFullscreen";
+            this.btnFullscreen.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.btnFullscreen_Click);
             // 
             // grpFormat
             // 
@@ -324,6 +332,7 @@ namespace WordMarkdownAddIn
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnSave;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnPanel;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton btnOpen;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton btnFullscreen;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup grpFormat;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bBold;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton bItalic;
