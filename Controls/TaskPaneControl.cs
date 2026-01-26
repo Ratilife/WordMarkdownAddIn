@@ -47,33 +47,53 @@ namespace WordMarkdownAddIn.Controls
             _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             
             // Подписываемся на событие загрузки навигации для отладки
-            _webView.CoreWebView2.NavigationCompleted += async (navSender, navArgs) =>
+            _webView.CoreWebView2.NavigationCompleted += (navSender, navArgs) =>
             {
                 System.Diagnostics.Debug.WriteLine("[C#] NavigationCompleted: HTML загружен");
                 
                 // Восстановление markdown если он был установлен до готовности WebView2
                 if (!string.IsNullOrEmpty(_latestMarkdown))
                 {
-                    await Task.Delay(100); // Небольшая задержка для инициализации JS
-                    
-                    try
+                    // Используем BeginInvoke для выполнения в UI потоке после задержки
+                    var markdownToRestore = _latestMarkdown;
+                    System.Threading.Tasks.Task.Delay(300).ContinueWith(t =>
                     {
-                        var coreWebView2 = _webView.CoreWebView2;
-                        if (coreWebView2 != null)
+                        if (this.IsDisposed) return;
+                        
+                        this.BeginInvoke(new Action(() =>
                         {
-                            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_latestMarkdown));
-                            await coreWebView2.ExecuteScriptAsync($"window.editorSetValue(base64ToUtf8('{b64}'))");
-                            
-                            var renderedHtml = _renderer.RenderoHtml(_latestMarkdown);
-                            PostRenderHtml(renderedHtml);
-                            
-                            System.Diagnostics.Debug.WriteLine($"[C#] Восстановлен markdown после NavigationCompleted, длина: {_latestMarkdown.Length}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[C#] Ошибка восстановления markdown: {ex.Message}");
-                    }
+                            try
+                            {
+                                if (!_coreReady || _webView == null) return;
+                                var coreWebView2 = _webView.CoreWebView2;
+                                if (coreWebView2 == null) return;
+                                
+                                // Используем тот же подход, что и в SetMarkdown - с экранированием
+                                var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(markdownToRestore));
+                                var escapedB64 = b64.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "\\r").Replace("\n", "\\n");
+                                var script = $@"
+                                    (function() {{
+                                        try {{
+                                            var b64 = '{escapedB64}';
+                                            window.editorSetValue(base64ToUtf8(b64));
+                                            console.log('[C#->JS] Markdown восстановлен после NavigationCompleted');
+                                        }} catch(e) {{
+                                            console.error('[C#->JS] Ошибка восстановления markdown:', e);
+                                        }}
+                                    }})();";
+                                coreWebView2.ExecuteScriptAsync(script);
+                                
+                                var renderedHtml = _renderer.RenderoHtml(markdownToRestore);
+                                PostRenderHtml(renderedHtml);
+                                
+                                System.Diagnostics.Debug.WriteLine($"[C#] Восстановлен markdown после NavigationCompleted, длина: {markdownToRestore.Length}");
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[C#] Ошибка восстановления markdown: {ex.Message}");
+                            }
+                        }));
+                    });
                 }
                 
                 // Проверяем, что элементы существуют
