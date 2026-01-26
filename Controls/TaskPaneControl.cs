@@ -64,8 +64,8 @@ namespace WordMarkdownAddIn.Controls
                             var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_latestMarkdown));
                             await coreWebView2.ExecuteScriptAsync($"window.editorSetValue(base64ToUtf8('{b64}'))");
                             
-                            var html = _renderer.RenderoHtml(_latestMarkdown);
-                            PostRenderHtml(html);
+                            var renderedHtml = _renderer.RenderoHtml(_latestMarkdown);
+                            PostRenderHtml(renderedHtml);
                             
                             System.Diagnostics.Debug.WriteLine($"[C#] Восстановлен markdown после NavigationCompleted, длина: {_latestMarkdown.Length}");
                         }
