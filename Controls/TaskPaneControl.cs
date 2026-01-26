@@ -56,7 +56,7 @@ namespace WordMarkdownAddIn.Controls
                 {
                     // Используем BeginInvoke для выполнения в UI потоке после задержки
                     var markdownToRestore = _latestMarkdown;
-                    System.Threading.Tasks.Task.Delay(300).ContinueWith(t =>
+                    System.Threading.Tasks.Task.Delay(50).ContinueWith(t =>
                     {
                         if (this.IsDisposed) return;
                         
@@ -96,28 +96,6 @@ namespace WordMarkdownAddIn.Controls
                     });
                 }
                 
-                // Проверяем, что элементы существуют
-                _webView.CoreWebView2.ExecuteScriptAsync(@"
-                    setTimeout(function() {
-                        var editor = document.getElementById('editor');
-                        var preview = document.getElementById('preview');
-                        var btnSplit = document.getElementById('btn-split');
-                        var btnMarkdown = document.getElementById('btn-markdown');
-                        var btnHtml = document.getElementById('btn-html');
-                        var viewControls = document.querySelector('.view-controls');
-                        
-                        console.log('[JS] Проверка элементов после загрузки:');
-                        console.log('  editor:', editor ? 'найден' : 'НЕ НАЙДЕН');
-                        console.log('  preview:', preview ? 'найден' : 'НЕ НАЙДЕН');
-                        console.log('  btnSplit:', btnSplit ? 'найден' : 'НЕ НАЙДЕН');
-                        console.log('  btnMarkdown:', btnMarkdown ? 'найден' : 'НЕ НАЙДЕН');
-                        console.log('  btnHtml:', btnHtml ? 'найден' : 'НЕ НАЙДЕН');
-                        console.log('  viewControls:', viewControls ? 'найден' : 'НЕ НАЙДЕН');
-                        console.log('  body.className:', document.body.className);
-                        console.log('  body.style.display:', document.body.style.display);
-                        console.log('  viewControls.style.display:', viewControls ? viewControls.style.display : 'N/A');
-                    }, 500);
-                ");
             };
             
             var html = BuildHtmlShell();
