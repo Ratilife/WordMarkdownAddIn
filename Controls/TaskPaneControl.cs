@@ -47,9 +47,35 @@ namespace WordMarkdownAddIn.Controls
             _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             
             // Подписываемся на событие загрузки навигации для отладки
-            _webView.CoreWebView2.NavigationCompleted += (navSender, navArgs) =>
+            _webView.CoreWebView2.NavigationCompleted += async (navSender, navArgs) =>
             {
                 System.Diagnostics.Debug.WriteLine("[C#] NavigationCompleted: HTML загружен");
+                
+                // Восстановление markdown если он был установлен до готовности WebView2
+                if (!string.IsNullOrEmpty(_latestMarkdown))
+                {
+                    await Task.Delay(100); // Небольшая задержка для инициализации JS
+                    
+                    try
+                    {
+                        var coreWebView2 = _webView.CoreWebView2;
+                        if (coreWebView2 != null)
+                        {
+                            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(_latestMarkdown));
+                            await coreWebView2.ExecuteScriptAsync($"window.editorSetValue(base64ToUtf8('{b64}'))");
+                            
+                            var html = _renderer.RenderoHtml(_latestMarkdown);
+                            PostRenderHtml(html);
+                            
+                            System.Diagnostics.Debug.WriteLine($"[C#] Восстановлен markdown после NavigationCompleted, длина: {_latestMarkdown.Length}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[C#] Ошибка восстановления markdown: {ex.Message}");
+                    }
+                }
+                
                 // Проверяем, что элементы существуют
                 _webView.CoreWebView2.ExecuteScriptAsync(@"
                     setTimeout(function() {
